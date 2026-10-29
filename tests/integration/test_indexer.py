@@ -32,9 +32,22 @@ def test_index_same_content_skipped(tmp_path: Path):
 def test_reindex_replaces_old_version(tmp_path: Path):
     idx = make_indexer(tmp_path)
     idx.index_document(Document(source="a.md", content="旧版本内容"))
-    idx.index_document(Document(source="a.md", content="全新版本内容，完全不一样"))
+    new_doc = Document(source="a.md", content="全新版本内容，完全不一样")
+    result = idx.index_document(new_doc)
     assert idx.store.list_documents() == ["a.md"]
-    assert idx.store.get_by_source("a.md") != ""
+    assert idx.store.get_by_source("a.md") == new_doc.doc_id
+    assert idx.store.count() == result.added
+
+
+def test_same_content_different_sources_both_indexed(tmp_path: Path):
+    idx = make_indexer(tmp_path)
+    r1 = idx.index_document(Document(source="a.md", content="完全相同的内容"))
+    r2 = idx.index_document(Document(source="b.md", content="完全相同的内容"))
+    assert not r1.skipped and not r2.skipped
+    assert idx.store.count() == r1.added + r2.added
+    assert idx.store.list_documents() == ["a.md", "b.md"]
+    assert idx.store.get_by_source("a.md") is not None
+    assert idx.store.get_by_source("b.md") is not None
 
 
 def test_index_empty_document_skipped(tmp_path: Path):
