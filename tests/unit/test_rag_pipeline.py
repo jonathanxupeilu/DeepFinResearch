@@ -5,8 +5,20 @@ from app.models import RetrievedChunk
 from app.pipeline.rag import RAGPipeline
 
 CHUNKS = [
-    RetrievedChunk(doc_id="d1", source="a.md", chunk_index=0, text="巴菲特推崇护城河理论", score=0.9),
-    RetrievedChunk(doc_id="d2", source="b.md", chunk_index=3, text="施洛斯偏好低 PB 筛选", score=0.8),
+    RetrievedChunk(
+        doc_id="d1",
+        source="a.md",
+        chunk_index=0,
+        text="巴菲特推崇护城河理论",
+        score=0.9,
+    ),
+    RetrievedChunk(
+        doc_id="d2",
+        source="b.md",
+        chunk_index=3,
+        text="施洛斯偏好低 PB 筛选",
+        score=0.8,
+    ),
 ]
 
 
@@ -29,7 +41,7 @@ def test_build_messages_contains_context_and_markers():
 
 
 def test_answer_returns_citations():
-    pipeline, retriever, llm = make_pipeline()
+    pipeline, _retriever, llm = make_pipeline()
     result = pipeline.answer("什么是护城河？")
     assert result.answer == "根据[1]……"
     assert len(result.citations) == 2

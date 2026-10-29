@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.ingest.loaders import load_file, SUPPORTED
+from app.ingest.loaders import SUPPORTED, load_file
 
 
 def test_supported_formats():

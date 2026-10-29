@@ -1,6 +1,6 @@
 import pytest
 
-from app.factory import build_pipeline, build_ingest_components
+from app.factory import build_ingest_components, build_pipeline
 
 
 @pytest.fixture
@@ -18,10 +18,12 @@ def env(monkeypatch, tmp_path):
 def test_build_pipeline_types(env):
     pipeline = build_pipeline()
     from app.pipeline.rag import RAGPipeline
+
     assert isinstance(pipeline, RAGPipeline)
 
 
 def test_build_ingest_components(env):
     indexer = build_ingest_components()
     from app.ingest.indexer import Indexer
+
     assert isinstance(indexer, Indexer)

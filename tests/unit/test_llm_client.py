@@ -16,7 +16,9 @@ def _status_error(cls, status_code: int):
 
 
 def test_deepseek_satisfies_protocol():
-    assert isinstance(DeepSeekClient(api_key="k", base_url="http://x", model="m"), LLMClient)
+    assert isinstance(
+        DeepSeekClient(api_key="k", base_url="http://x", model="m"), LLMClient
+    )
 
 
 def test_chat_returns_text():
@@ -53,8 +55,10 @@ def test_chat_retries_on_rate_limit_and_reraises():
     c = DeepSeekClient(api_key="k", base_url="http://x", model="m")
     c._client = MagicMock()
     c._client.chat.completions.create.side_effect = _status_error(RateLimitError, 429)
-    with patch("time.sleep"):  # mock 掉 tenacity 的指数退避等待
-        with pytest.raises(RateLimitError) as exc_info:
-            c.chat([{"role": "user", "content": "hi"}])
+    with (
+        patch("time.sleep"),
+        pytest.raises(RateLimitError) as exc_info,
+    ):  # mock 掉退避等待
+        c.chat([{"role": "user", "content": "hi"}])
     assert not isinstance(exc_info.value, RetryError)
     assert c._client.chat.completions.create.call_count == 3

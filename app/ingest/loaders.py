@@ -13,7 +13,9 @@ def load_file(path: Path) -> str:
     if ext == ".pdf":
         from pypdf import PdfReader
 
-        return "\n".join(page.extract_text() or "" for page in PdfReader(str(path)).pages)
+        return "\n".join(
+            page.extract_text() or "" for page in PdfReader(str(path)).pages
+        )
     from docx import Document as Docx  # .docx
 
     return "\n".join(p.text for p in Docx(str(path)).paragraphs if p.text.strip())

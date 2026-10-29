@@ -6,7 +6,7 @@ def test_settings_requires_keys(monkeypatch):
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
     from app.config import Settings
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017 — 仅验证缺 Key 必然报错
         Settings(_env_file=None)
 
 

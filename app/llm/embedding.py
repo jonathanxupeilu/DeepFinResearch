@@ -11,8 +11,8 @@ from tenacity import (
 
 logger = logging.getLogger(__name__)
 
-MAX_CHARS = 6000   # DashScope 单条 2048 token 的字符级保护上限
-BATCH_SIZE = 10    # DashScope 批量上限
+MAX_CHARS = 6000  # DashScope 单条 2048 token 的字符级保护上限
+BATCH_SIZE = 10  # DashScope 批量上限
 
 
 class DashScopeEmbedder:

@@ -44,7 +44,7 @@ if question := st.chat_input("输入你的问题…"):
         with st.spinner("检索知识库并生成回答…"):
             try:
                 result = build_pipeline().answer(question)
-            except Exception:
+            except Exception:  # noqa: BLE001 — UI 兜底，任何生成异常都转为错误提示
                 result = None
         if result is None:
             st.error("生成回答失败，请稍后重试")
@@ -54,4 +54,6 @@ if question := st.chat_input("输入你的问题…"):
                 with st.expander("📎 引用来源"):
                     for c in result.citations:
                         st.markdown(f"**[{c.marker}] {c.source}**\n\n> {c.text[:200]}…")
-            st.session_state.messages.append({"role": "assistant", "content": result.answer})
+            st.session_state.messages.append(
+                {"role": "assistant", "content": result.answer}
+            )

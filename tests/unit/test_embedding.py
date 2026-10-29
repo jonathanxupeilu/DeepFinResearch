@@ -6,7 +6,7 @@ import pytest
 from openai import AuthenticationError, RateLimitError
 from tenacity import RetryError
 
-from app.llm.embedding import BATCH_SIZE, MAX_CHARS, DashScopeEmbedder
+from app.llm.embedding import MAX_CHARS, DashScopeEmbedder
 
 
 def _status_error(cls, status_code: int):
@@ -33,8 +33,8 @@ def test_embed_batches_over_10():
     e = DashScopeEmbedder(api_key="k", base_url="http://x", model="m")
     client = MagicMock()
     # 真实 API 返回向量数与输入条数一致，mock 按输入长度回包
-    client.embeddings.create.side_effect = (
-        lambda **kw: MagicMock(data=[MagicMock(embedding=[0.0]) for _ in kw["input"]])
+    client.embeddings.create.side_effect = lambda **kw: MagicMock(
+        data=[MagicMock(embedding=[0.0]) for _ in kw["input"]]
     )
     e._client = client
     out = e.embed([str(i) for i in range(25)])  # 25 条 → 3 个批次

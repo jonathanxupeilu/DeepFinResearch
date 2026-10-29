@@ -16,8 +16,9 @@ class IndexResult(BaseModel):
 
 
 class Indexer:
-    def __init__(self, store: VectorStore, embedder,
-                 chunk_size: int, chunk_overlap: int) -> None:
+    def __init__(
+        self, store: VectorStore, embedder, chunk_size: int, chunk_overlap: int
+    ) -> None:
         self.store = store
         self.embedder = embedder
         self.splitter = TextSplitter(chunk_size, chunk_overlap)
@@ -37,8 +38,7 @@ class Indexer:
         for i, text in enumerate(texts):
             # id 中加入 source，避免不同 source 内容 hash 相同时互相覆盖
             ids.append(f"{doc.source}-{doc.doc_id}-{i}")
-            metas.append({"doc_id": doc.doc_id, "source": doc.source,
-                          "chunk_index": i})
+            metas.append({"doc_id": doc.doc_id, "source": doc.source, "chunk_index": i})
         self.store.upsert(ids=ids, embeddings=vectors, documents=texts, metadatas=metas)
         logger.info("入库 %s: %d 个切片", doc.source, len(texts))
         return IndexResult(source=doc.source, added=len(texts))

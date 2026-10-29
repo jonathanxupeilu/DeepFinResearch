@@ -13,7 +13,7 @@ class Document(BaseModel):
     content: str
     doc_id: str = ""
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, __context, /) -> None:
         if not self.doc_id:
             self.doc_id = _hash(self.content)
 
