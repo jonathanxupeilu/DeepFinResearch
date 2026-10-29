@@ -1,5 +1,11 @@
 from app.models import Citation, RagAnswer, RetrievedChunk
-from app.pipeline.prompts import NO_CONTEXT_ANSWER, SYSTEM_PROMPT, USER_TEMPLATE
+from app.pipeline.prompts import (
+    NO_CONTEXT_ANSWER,
+    SMALLTALK_ANSWER,
+    SYSTEM_PROMPT,
+    USER_TEMPLATE,
+    is_smalltalk,
+)
 from app.retrieval.retriever import Retriever
 
 
@@ -26,6 +32,8 @@ class RAGPipeline:
         ]
 
     def answer(self, question: str) -> RagAnswer:
+        if is_smalltalk(question):
+            return RagAnswer(answer=SMALLTALK_ANSWER)
         chunks = self.retriever.retrieve(question)
         if not chunks:
             return RagAnswer(answer=NO_CONTEXT_ANSWER)

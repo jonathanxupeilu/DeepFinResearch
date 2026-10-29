@@ -57,3 +57,25 @@ def test_answer_no_retrieval_honest_refusal():
     assert "未找到" in result.answer
     assert result.citations == []
     llm.chat.assert_not_called()  # 不得调用 LLM 硬答
+
+
+def test_answer_smalltalk_skips_retrieval_and_llm():
+    pipeline, retriever, llm = make_pipeline()
+    result = pipeline.answer("你好")
+    assert result.answer  # 有友好回复
+    assert result.citations == []
+    retriever.retrieve.assert_not_called()  # 不检索
+    llm.chat.assert_not_called()  # 不调 LLM
+
+
+def test_answer_smalltalk_variants():
+    pipeline, retriever, _ = make_pipeline()
+    for q in ["您好！", "hello", "谢谢", "再见～", "在吗"]:
+        assert pipeline.answer(q).citations == []
+    retriever.retrieve.assert_not_called()
+
+
+def test_greeting_prefix_with_real_question_still_retrieves():
+    pipeline, retriever, _ = make_pipeline()
+    pipeline.answer("你好，什么是护城河？")
+    retriever.retrieve.assert_called_once_with("你好，什么是护城河？")

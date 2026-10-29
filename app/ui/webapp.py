@@ -6,11 +6,11 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-import streamlit as st  # noqa: E402
+import streamlit as st
 
-from app.factory import build_ingest_components, build_pipeline  # noqa: E402
-from app.ingest.loaders import load_file  # noqa: E402
-from app.models import Document, RagAnswer  # noqa: E402
+from app.factory import build_ingest_components, build_pipeline
+from app.ingest.loaders import load_file
+from app.models import Document, RagAnswer
 
 st.set_page_config(page_title="DeepFinResearch", page_icon="⚙️")
 st.title("⚙️ DeepFinResearch · 本地知识库问答")
