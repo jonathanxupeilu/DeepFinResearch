@@ -3,6 +3,8 @@
 
 import sys
 
+from pydantic import ValidationError
+
 from app.factory import build_pipeline
 from app.models import RagAnswer
 
@@ -32,12 +34,27 @@ def run(pipeline, input_fn=input, output=print) -> None:
         if question.lower() in EXIT_WORDS:
             output("再见。")
             return
-        result = pipeline.answer(question)
+        try:
+            result = pipeline.answer(question)
+        except KeyboardInterrupt:
+            output("已中断，继续。")
+            continue
+        except Exception as e:  # noqa: BLE001
+            output(f"⚠️ 出错了：{e}")
+            continue
         output(format_answer(result))
 
 
 def main() -> int:
-    run(build_pipeline())
+    try:
+        pipeline = build_pipeline()
+    except ValidationError:
+        print(
+            "缺少必需的 API Key，请复制 .env.example 为 .env 并填入 "
+            "DEEPSEEK_API_KEY / DASHSCOPE_API_KEY"
+        )
+        return 1
+    run(pipeline)
     return 0
 
 
