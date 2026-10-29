@@ -1,12 +1,26 @@
-import os
-
 import pytest
+from pydantic import ValidationError
+
+
+def _has_keys() -> bool:
+    """尝试构造 Settings 检测 API Key 是否可用。
+
+    Settings 同时读取 .env 文件与环境变量（环境变量优先），两种配置方式都能检测到。
+    """
+    try:
+        from app.config import Settings
+
+        s = Settings()
+    except ValidationError:  # 缺少必需字段（Key 未配置）时构造失败
+        return False
+    return bool(s.deepseek_api_key and s.dashscope_api_key)
+
 
 pytestmark = [
     pytest.mark.e2e,
     pytest.mark.skipif(
-        not os.getenv("DEEPSEEK_API_KEY") or not os.getenv("DASHSCOPE_API_KEY"),
-        reason="需要真实 API Key，设置后运行: pytest tests/e2e -m e2e",
+        not _has_keys(),
+        reason="需要真实 API Key（.env 或环境变量），设置后运行: pytest tests/e2e -m e2e",
     ),
 ]
 
@@ -20,28 +34,31 @@ def test_full_rag_roundtrip(tmp_path, monkeypatch):
 
     monkeypatch.setenv("CHROMA_DIR", str(tmp_path))  # 隔离默认 chroma 目录
     get_settings.cache_clear()  # 防 lru_cache 带入其他测试的假配置（参考 test_factory）
-    s = get_settings()
-    store = VectorStore(persist_dir=tmp_path / "chroma", collection="smoke")
-    from app.llm.client import DeepSeekClient
-    from app.llm.embedding import DashScopeEmbedder
+    try:
+        s = get_settings()
+        store = VectorStore(persist_dir=tmp_path / "chroma", collection="smoke")
+        from app.llm.client import DeepSeekClient
+        from app.llm.embedding import DashScopeEmbedder
 
-    embedder = DashScopeEmbedder(
-        s.dashscope_api_key, s.dashscope_base_url, s.embedding_model
-    )
-    idx = Indexer(store, embedder, s.chunk_size, s.chunk_overlap)
-    result = idx.index_document(
-        Document(
-            source="测试.md", content="巴菲特的护城河理论指企业拥有的可持续竞争优势。"
+        embedder = DashScopeEmbedder(
+            s.dashscope_api_key, s.dashscope_base_url, s.embedding_model
         )
-    )
-    assert result.added > 0
+        idx = Indexer(store, embedder, s.chunk_size, s.chunk_overlap)
+        result = idx.index_document(
+            Document(
+                source="测试.md",
+                content="巴菲特的护城河理论指企业拥有的可持续竞争优势。",
+            )
+        )
+        assert result.added > 0
 
-    from app.pipeline.rag import RAGPipeline
-    from app.retrieval.retriever import Retriever
+        from app.pipeline.rag import RAGPipeline
+        from app.retrieval.retriever import Retriever
 
-    retriever = Retriever(store, embedder, s.top_k, s.score_threshold)
-    llm = DeepSeekClient(s.deepseek_api_key, s.deepseek_base_url, s.deepseek_model)
-    answer = RAGPipeline(retriever, llm).answer("什么是护城河理论？")
-    assert answer.answer
-    assert len(answer.citations) >= 1
-    get_settings.cache_clear()  # teardown 恢复，避免污染后续测试
+        retriever = Retriever(store, embedder, s.top_k, s.score_threshold)
+        llm = DeepSeekClient(s.deepseek_api_key, s.deepseek_base_url, s.deepseek_model)
+        answer = RAGPipeline(retriever, llm).answer("什么是护城河理论？")
+        assert answer.answer
+        assert len(answer.citations) >= 1
+    finally:
+        get_settings.cache_clear()  # teardown 恢复，避免污染后续测试（断言失败也会执行）
