@@ -6,7 +6,7 @@
 1. `python -m venv .venv && .venv/Scripts/activate`（Windows）
 2. `pip install -e ".[dev]"`
 3. `cp .env.example .env` 并填入 `DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY`
-4. `streamlit run app/ui/app.py`
+4. `streamlit run app/ui/webapp.py`
 - 终端问答：`python -m app.cli`
 
 ## 测试

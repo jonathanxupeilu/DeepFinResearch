@@ -1,10 +1,16 @@
+import sys
 from pathlib import Path
 
-import streamlit as st
+# streamlit run 会把本文件所在目录插到 sys.path 前面，
+# 显式把项目根放到最前，保证 `import app` 解析到项目包
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_PROJECT_ROOT))
 
-from app.factory import build_ingest_components, build_pipeline
-from app.ingest.loaders import load_file
-from app.models import Document, RagAnswer
+import streamlit as st  # noqa: E402
+
+from app.factory import build_ingest_components, build_pipeline  # noqa: E402
+from app.ingest.loaders import load_file  # noqa: E402
+from app.models import Document, RagAnswer  # noqa: E402
 
 st.set_page_config(page_title="DeepFinResearch", page_icon="⚙️")
 st.title("⚙️ DeepFinResearch · 本地知识库问答")
