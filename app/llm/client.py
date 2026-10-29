@@ -14,7 +14,7 @@ Message = dict[str, str]
 
 @runtime_checkable
 class LLMClient(Protocol):
-    """LLM 对话接口抽象：二期 ReAct / 四期多 Agent 沿此扩展。"""
+    """LLM 对话接口抽象：三期 ReAct / 五期多 Agent 沿此扩展。"""
 
     def chat(self, messages: list[Message], temperature: float = 0.7) -> str: ...
 
@@ -32,6 +32,6 @@ class DeepSeekClient:
     )
     def chat(self, messages: list[Message], temperature: float = 0.7) -> str:
         resp = self._client.chat.completions.create(
-            model=self.model, messages=messages, temperature=temperature
+            model=self.model, messages=messages, temperature=temperature  # type: ignore[arg-type]  # openai SDK 的消息联合类型不收 dict list，运行时兼容
         )
         return resp.choices[0].message.content or ""

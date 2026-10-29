@@ -1,17 +1,17 @@
 from app.models import Citation, RagAnswer, RetrievedChunk
-from app.pipeline.prompts import SYSTEM_PROMPT, USER_TEMPLATE
+from app.pipeline.prompts import NO_CONTEXT_ANSWER, SYSTEM_PROMPT, USER_TEMPLATE
 from app.retrieval.retriever import Retriever
 
 
 class RAGPipeline:
-    """一期所有 prompt 组装唯一收口。二期 ReAct / 三期 ContextBuilder / 四期角色化在此扩展。"""
+    """一期所有 prompt 组装唯一收口。三期 ReAct / 四期 ContextBuilder / 五期角色化在此扩展。"""
 
     def __init__(
         self, retriever: Retriever, llm, system_prompt: str = SYSTEM_PROMPT
     ) -> None:
         self.retriever = retriever
         self.llm = llm
-        self.system_prompt = system_prompt  # 四期多 Agent：注入不同角色 prompt
+        self.system_prompt = system_prompt  # 五期多 Agent：注入不同角色 prompt
 
     def build_messages(self, question: str, chunks: list[RetrievedChunk]) -> list[dict]:
         context = "\n\n".join(
@@ -28,9 +28,7 @@ class RAGPipeline:
     def answer(self, question: str) -> RagAnswer:
         chunks = self.retriever.retrieve(question)
         if not chunks:
-            return RagAnswer(
-                answer="知识库中未找到与该问题相关的内容，请先入库相关文档或换一种问法。"
-            )
+            return RagAnswer(answer=NO_CONTEXT_ANSWER)
         messages = self.build_messages(question, chunks)
         reply = self.llm.chat(messages, temperature=0.3)
         citations = [

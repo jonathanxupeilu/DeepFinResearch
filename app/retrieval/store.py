@@ -17,13 +17,13 @@ class VectorStore:
         )
 
     def query(self, embedding: list[float], top_k: int = 5):
-        res = self.collection.query(query_embeddings=[embedding], n_results=top_k)
+        res = self.collection.query(query_embeddings=[embedding], n_results=top_k)  # type: ignore[arg-type]
         return list(
             zip(
                 res["ids"][0],
-                res["documents"][0],
-                res["metadatas"][0],
-                res["distances"][0],
+                res["documents"][0],  # type: ignore[index]
+                res["metadatas"][0],  # type: ignore[index]
+                res["distances"][0],  # type: ignore[index]
             )
         )
 
@@ -37,11 +37,12 @@ class VectorStore:
         return self.collection.count()
 
     def list_documents(self) -> list[str]:
-        got = self.collection.get()
-        return sorted({m["source"] for m in got["metadatas"]})
+        got = self.collection.get(include=["metadatas"])
+        metadatas = got["metadatas"] or []
+        return sorted({str(m["source"]) for m in metadatas})
 
     def get_by_source(self, source: str) -> str | None:
         got = self.collection.get(where={"source": source}, include=["metadatas"])
         if not got["metadatas"]:
             return None
-        return got["metadatas"][0]["doc_id"]
+        return got["metadatas"][0]["doc_id"]  # type: ignore[return-value]

@@ -9,3 +9,5 @@ USER_TEMPLATE = """【参考资料】
 
 【问题】
 {question}"""
+
+NO_CONTEXT_ANSWER = "知识库中未找到与该问题相关的内容，请先入库相关文档或换一种问法。"

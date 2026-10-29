@@ -4,7 +4,7 @@ import streamlit as st
 
 from app.factory import build_ingest_components, build_pipeline
 from app.ingest.loaders import load_file
-from app.models import Document
+from app.models import Document, RagAnswer
 
 st.set_page_config(page_title="DeepFinResearch", page_icon="⚙️")
 st.title("⚙️ DeepFinResearch · 本地知识库问答")
@@ -23,11 +23,11 @@ with st.sidebar:
             tmp.write_bytes(uploaded.getvalue())
             text = load_file(tmp)
             doc = Document(source=uploaded.name, content=text)
-            result = build_ingest_components().index_document(doc)
-            if result.skipped:
+            index_result = build_ingest_components().index_document(doc)
+            if index_result.skipped:
                 st.info(f"「{uploaded.name}」内容未变化，已跳过")
             else:
-                st.success(f"「{uploaded.name}」入库成功：{result.added} 个切片")
+                st.success(f"「{uploaded.name}」入库成功：{index_result.added} 个切片")
         except (ValueError, OSError, UnicodeDecodeError) as e:
             st.error(f"入库失败: {e}")
 
@@ -42,6 +42,7 @@ if question := st.chat_input("输入你的问题…"):
 
     with st.chat_message("assistant"):
         with st.spinner("检索知识库并生成回答…"):
+            result: RagAnswer | None
             try:
                 result = build_pipeline().answer(question)
             except Exception:  # noqa: BLE001 — UI 兜底，任何生成异常都转为错误提示

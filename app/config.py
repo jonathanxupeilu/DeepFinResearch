@@ -24,4 +24,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings()  # type: ignore[call-arg]  # pydantic-settings 从环境变量注入必填字段，构造期误报
