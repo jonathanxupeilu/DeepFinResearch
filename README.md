@@ -7,6 +7,7 @@
 2. `pip install -e ".[dev]"`
 3. `cp .env.example .env` 并填入 `DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY`
 4. `streamlit run app/ui/app.py`
+- 终端问答：`python -m app.cli`
 
 ## 测试
 - `pytest tests/unit tests/integration -v`（无需真实 Key）
