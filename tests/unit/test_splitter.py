@@ -32,3 +32,15 @@ def test_empty_and_whitespace():
 def test_invalid_overlap_raises():
     with pytest.raises(ValueError):
         TextSplitter(chunk_size=50, chunk_overlap=50)
+
+
+def test_invalid_chunk_size_raises():
+    with pytest.raises(ValueError):
+        TextSplitter(chunk_size=0, chunk_overlap=0)
+    with pytest.raises(ValueError):
+        TextSplitter(chunk_size=-50, chunk_overlap=0)
+
+
+def test_invalid_negative_overlap_raises():
+    with pytest.raises(ValueError):
+        TextSplitter(chunk_size=50, chunk_overlap=-10)

@@ -5,8 +5,8 @@ class TextSplitter:
     """按段落聚合切片；超长段落硬切并保留 overlap。"""
 
     def __init__(self, chunk_size: int = 500, chunk_overlap: int = 100) -> None:
-        if chunk_overlap >= chunk_size:
-            raise ValueError("chunk_overlap 必须小于 chunk_size")
+        if chunk_size <= 0 or chunk_overlap < 0 or chunk_overlap >= chunk_size:
+            raise ValueError("chunk_size 必须为正且 chunk_overlap 必须非负且小于 chunk_size")
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
