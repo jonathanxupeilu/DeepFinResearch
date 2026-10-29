@@ -1206,10 +1206,134 @@ def test_full_rag_roundtrip(tmp_path, monkeypatch):
 
 ---
 
+### Task 13: CLI 问答入口
+
+**Files:**
+- Create: `app/cli.py`
+- Modify: `README.md`（快速开始追加 CLI 用法）
+- Test: `tests/unit/test_cli.py`
+
+**Step 1: 写失败测试（注入 input/print，不真实调用）**
+
+```python
+# tests/unit/test_cli.py
+from unittest.mock import MagicMock
+
+from app.cli import format_answer, run
+from app.models import Citation, RagAnswer
+
+
+def _mock_pipeline(answer: str, citations: list[Citation] | None = None) -> MagicMock:
+    p = MagicMock()
+    p.answer.return_value = RagAnswer(answer=answer, citations=citations or [])
+    return p
+
+
+def test_format_answer_with_citations():
+    result = RagAnswer(answer="结论 [1]",
+                       citations=[Citation(marker=1, source="a.md", text="片段")])
+    text = format_answer(result)
+    assert "结论 [1]" in text
+    assert "[1] a.md" in text
+
+
+def test_format_answer_no_citations():
+    assert format_answer(RagAnswer(answer="纯回复")) == "纯回复"
+
+
+def test_run_repl_loop():
+    pipeline = _mock_pipeline("回答内容")
+    inputs = iter(["什么是护城河？", "/exit"])
+    out: list[str] = []
+    run(pipeline, input_fn=lambda _: next(inputs), output=out.append)
+    pipeline.answer.assert_called_once_with("什么是护城河？")
+    assert any("回答内容" in line for line in out)
+
+
+def test_run_ignores_blank_and_eof():
+    pipeline = _mock_pipeline("x")
+    inputs = iter(["", "  "])  # 空输入后 EOF
+    out: list[str] = []
+    run(pipeline, input_fn=lambda _: next(inputs), output=out.append)  # EOFError 正常退出
+    pipeline.answer.assert_not_called()
+
+
+def test_run_exit_aliases():
+    pipeline = _mock_pipeline("x")
+    for alias in ("/exit", "/quit", "exit", "q"):
+        inputs = iter([alias])
+        out: list[str] = []
+        run(pipeline, input_fn=lambda _: next(inputs), output=out.append)
+    pipeline.answer.assert_not_called()
+```
+
+**Step 2:** `pytest tests/unit/test_cli.py -v` → FAIL (`ModuleNotFoundError`)
+
+**Step 3: 实现**
+
+```python
+# app/cli.py
+"""终端问答入口：python -m app.cli"""
+import sys
+
+from app.factory import build_pipeline
+from app.models import RagAnswer
+
+EXIT_WORDS = {"/exit", "/quit", "exit", "quit", "q"}
+
+
+def format_answer(result: RagAnswer) -> str:
+    lines = [result.answer]
+    if result.citations:
+        lines.append("")
+        lines.append("📎 引用来源:")
+        lines.extend(f"  [{c.marker}] {c.source}" for c in result.citations)
+    return "\n".join(lines)
+
+
+def run(pipeline, input_fn=input, output=print) -> None:
+    output("⚙️ DeepFinResearch 投研顾问（输入 /exit 退出）")
+    while True:
+        try:
+            question = input_fn("❯ ").strip()
+        except (EOFError, KeyboardInterrupt):
+            output("再见。")
+            return
+        if not question:
+            continue
+        if question.lower() in EXIT_WORDS:
+            output("再见。")
+            return
+        result = pipeline.answer(question)
+        output(format_answer(result))
+
+
+def main() -> int:
+    run(build_pipeline())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+README 快速开始追加：
+
+```markdown
+- 终端问答：`python -m app.cli`
+```
+
+**Step 4:** PASS；质量门禁 `ruff check . && black . && mypy app` 全绿
+
+**Step 5:** `git commit -m "feat: CLI 问答入口（REPL+引用展示+优雅退出）"`
+
+---
+
 ## 完成标准（Definition of Done）
 
 - [ ] `pytest tests/unit tests/integration` 全绿（无 Key 依赖）
 - [ ] `ruff check .` / `black --check .` / `mypy app` 通过
 - [ ] `streamlit run app/ui/app.py` 手动冒烟：上传文档 → 提问 → 带引用回答
+- [ ] `python -m app.cli` 手动冒烟：问答 → 引用展示 → /exit 退出
 - [ ] 每个 Task 均有独立 commit
 

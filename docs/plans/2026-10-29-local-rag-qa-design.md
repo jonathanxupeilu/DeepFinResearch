@@ -56,6 +56,7 @@ app/
     retriever.py   # query → top-k + 相似度阈值过滤
   pipeline/
     rag.py         # 检索 → prompt 模板 → LLM → 回复带引用（一期所有 prompt 组装收口于此）
+  cli.py           # 终端问答入口（REPL，与 UI 共用 factory 组装）
   ui/
     app.py         # Streamlit：聊天页 + 知识库管理页
 tests/
