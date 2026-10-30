@@ -68,6 +68,28 @@
 
 # 变更记录（原 CHANGELOG.md 内容并入）
 
+## [Unreleased]（2026-10-30 · 二期市场监控）
+
+### Added
+- **市场监控 6 维度采集**：持仓公告/每日要闻/宏观指标/美联储/重大会议/行业指标，
+  akshare 数据源，面板「立即采集」手动触发，单源失败隔离（`app/monitor/`）
+- **SQLite 事件存储**：`data/monitor.db`，内容 hash 去重，按维度/时间筛选
+  （`app/monitor/store.py`）
+- **双页导航**：`st.navigation` 拆分「投研顾问」与「市场监控」，聊天页迁移
+  `app/ui/pages/advisor.py`（入口命令不变）
+- **事件入库知识库联动**：监控事件一键转 Document 走一期 Indexer，投研顾问可检索引用
+- **持仓配置**：`config/holdings.json` 驱动持仓公告维度（缺失时该维度无数据不报错）
+
+### Changed
+- **akshare 列入依赖**：`pyproject.toml` 补录 `akshare>=1.16`（此前仅环境安装未声明，
+  重建环境会缺包）
+
+### 实施中偏差（相对计划/D008）
+- **AkshareCollector 基类抽取**：收敛各 akshare 采集器重复的取数/容错逻辑
+- **持仓公告多日窗口**：近 7 日逐日拉取公告，替代单日查询
+- **重大会议日历数据修正**：`config/policy_calendar.json` 按公开惯例修正会议日期
+  （如中央经济工作会议通常 12 月举行）
+
 ## [Unreleased]（2026-10-30 · 二期 backlog 清理）
 
 ### Fixed

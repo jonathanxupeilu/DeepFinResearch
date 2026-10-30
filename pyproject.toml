@@ -11,6 +11,7 @@ dependencies = [
     "python-docx>=1.1",
     "tenacity>=8.3",
     "streamlit>=1.35",
+    "akshare>=1.16",  # 二期市场监控数据源（6 维度采集），计划钉最低线
 ]
 
 [project.optional-dependencies]
