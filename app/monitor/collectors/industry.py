@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 _SGE_DATE_COL = "date"
 _SGE_CLOSE_COL = "Au99.99收盘"
 _BDI_DATE_COL = "日期"
-_BDI_CLOSE_COL = "收盘"
+_BDI_CLOSE_COL = "最新值"
 
 
 class IndustryCollector(AkshareCollector):
@@ -30,10 +30,10 @@ class IndustryCollector(AkshareCollector):
             ),
             (
                 "BDI运价",
-                self._ak.index_bdi_hist,
+                self._ak.macro_shipping_bdi,
                 _BDI_DATE_COL,
                 _BDI_CLOSE_COL,
-                "index_bdi_hist",
+                "macro_shipping_bdi",
             ),
         ]
         events: list[MonitorEvent] = []

@@ -11,8 +11,8 @@ def fake_ak(m):
     m.spot_hist_sge.return_value = pd.DataFrame(
         {"date": ["2026-10-29"], "Au99.99收盘": [780.5]}
     )
-    m.index_bdi_hist.return_value = pd.DataFrame(
-        {"日期": ["2026-10-29"], "收盘": [1450.0]}
+    m.macro_shipping_bdi.return_value = pd.DataFrame(
+        {"日期": ["2026-10-29"], "最新值": [2712.0]}
     )
     return m
 
@@ -30,8 +30,8 @@ def test_collects_one_event_per_indicator():
 def test_single_indicator_failure_isolated():
     ak = MagicMock()
     ak.spot_hist_sge.side_effect = RuntimeError("接口挂了")
-    ak.index_bdi_hist.return_value = pd.DataFrame(
-        {"日期": ["2026-10-29"], "收盘": [1450.0]}
+    ak.macro_shipping_bdi.return_value = pd.DataFrame(
+        {"日期": ["2026-10-29"], "最新值": [2712.0]}
     )
     events = IndustryCollector(ak=ak).collect()
     assert len(events) == 1
@@ -40,8 +40,8 @@ def test_single_indicator_failure_isolated():
 def test_empty_df_skipped():
     ak = MagicMock()
     ak.spot_hist_sge.return_value = pd.DataFrame({"date": [], "Au99.99收盘": []})
-    ak.index_bdi_hist.return_value = pd.DataFrame(
-        {"日期": ["2026-10-29"], "收盘": [1450.0]}
+    ak.macro_shipping_bdi.return_value = pd.DataFrame(
+        {"日期": ["2026-10-29"], "最新值": [2712.0]}
     )
     events = IndustryCollector(ak=ak).collect()
     assert len(events) == 1
@@ -53,8 +53,8 @@ def test_nan_value_row_skipped():
     ak.spot_hist_sge.return_value = pd.DataFrame(
         {"date": ["2026-10-29"], "Au99.99收盘": [float("nan")]}
     )
-    ak.index_bdi_hist.return_value = pd.DataFrame(
-        {"日期": ["2026-10-29"], "收盘": [1450.0]}
+    ak.macro_shipping_bdi.return_value = pd.DataFrame(
+        {"日期": ["2026-10-29"], "最新值": [2712.0]}
     )
     events = IndustryCollector(ak=ak).collect()
     assert len(events) == 1
@@ -67,8 +67,8 @@ def test_nan_date_row_skipped():
     ak.spot_hist_sge.return_value = pd.DataFrame(
         {"date": [None], "Au99.99收盘": [780.5]}
     )
-    ak.index_bdi_hist.return_value = pd.DataFrame(
-        {"日期": ["2026-10-29"], "收盘": [1450.0]}
+    ak.macro_shipping_bdi.return_value = pd.DataFrame(
+        {"日期": ["2026-10-29"], "最新值": [2712.0]}
     )
     events = IndustryCollector(ak=ak).collect()
     assert len(events) == 1
