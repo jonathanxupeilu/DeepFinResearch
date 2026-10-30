@@ -11,7 +11,10 @@ from tenacity import (
 
 logger = logging.getLogger(__name__)
 
-MAX_CHARS = 6000  # DashScope 单条 2048 token 的字符级保护上限
+# 官方限制：text-embedding-v3 单条最长 8192 token（batch 上限 10 条）。
+# 中英混合按 ~1.5 字符/token 保守换算 → 8192 token ≈ 12000 字符。
+# 入库切片远小于此值，此上限仅为防御性保护（见 docs.bailian text-embedding-synchronous-api）。
+MAX_CHARS = 12000
 BATCH_SIZE = 10  # DashScope 批量上限
 
 
