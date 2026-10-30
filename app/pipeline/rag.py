@@ -1,3 +1,5 @@
+import re
+
 from app.models import Citation, RagAnswer, RetrievedChunk
 from app.pipeline.prompts import (
     NO_CONTEXT_ANSWER,
@@ -7,6 +9,23 @@ from app.pipeline.prompts import (
     is_smalltalk,
 )
 from app.retrieval.retriever import Retriever
+
+_CITE_RE = re.compile(r"\[(\d+)\]")
+
+
+def _build_citations(reply: str, chunks: list[RetrievedChunk]) -> list[Citation]:
+    """只保留回答中实际标注 [n] 的来源；n 越界忽略；一个都没标则保留全部。"""
+    cited = {int(m) for m in _CITE_RE.findall(reply)}
+    if not cited:
+        return [
+            Citation(marker=i + 1, source=c.source, text=c.text)
+            for i, c in enumerate(chunks)
+        ]
+    return [
+        Citation(marker=i + 1, source=c.source, text=c.text)
+        for i, c in enumerate(chunks)
+        if i + 1 in cited
+    ]
 
 
 class RAGPipeline:
@@ -39,8 +58,4 @@ class RAGPipeline:
             return RagAnswer(answer=NO_CONTEXT_ANSWER)
         messages = self.build_messages(question, chunks)
         reply = self.llm.chat(messages, temperature=0.3)
-        citations = [
-            Citation(marker=i + 1, source=c.source, text=c.text)
-            for i, c in enumerate(chunks)
-        ]
-        return RagAnswer(answer=reply, citations=citations)
+        return RagAnswer(answer=reply, citations=_build_citations(reply, chunks))

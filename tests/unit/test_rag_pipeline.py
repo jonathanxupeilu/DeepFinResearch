@@ -44,10 +44,31 @@ def test_answer_returns_citations():
     pipeline, _retriever, llm = make_pipeline()
     result = pipeline.answer("什么是护城河？")
     assert result.answer == "根据[1]……"
-    assert len(result.citations) == 2
+    # 只保留回答中实际标注的引用来源
+    assert len(result.citations) == 1
     assert result.citations[0].marker == 1
     assert result.citations[0].source == "a.md"
     llm.chat.assert_called_once()
+
+
+def test_answer_citations_filtered_by_markers():
+    pipeline, _, _ = make_pipeline(llm_reply="综合[1]与[2]的观点……")
+    result = pipeline.answer("对比两位投资者的思路")
+    assert [c.marker for c in result.citations] == [1, 2]
+
+
+def test_answer_citation_out_of_range_ignored():
+    pipeline, _, _ = make_pipeline(llm_reply="主要依据[1]（另见[3]）")
+    result = pipeline.answer("什么是护城河？")
+    # [3] 不存在于检索结果，忽略
+    assert [c.marker for c in result.citations] == [1]
+
+
+def test_answer_without_markers_keeps_all_citations():
+    pipeline, _, _ = make_pipeline(llm_reply="模型没有按格式标注引用")
+    result = pipeline.answer("什么是护城河？")
+    # 未标注时不丢信息，保留全部来源
+    assert [c.marker for c in result.citations] == [1, 2]
 
 
 def test_answer_no_retrieval_honest_refusal():
