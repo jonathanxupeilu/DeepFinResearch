@@ -381,7 +381,7 @@ def test_single_collector_failure_isolated():
 **Files:**
 - Create: `tests/e2e/test_monitor_smoke.py`（`@pytest.mark.e2e`：真实 akshare 采集一轮 → 入库 → 各维度计数 ≥0 且 runner 无未捕获异常；真实接口可能波动，断言从宽：run_all 返回 6 份报告即可，不强制有数据）
 - Modify: `README.md`（二期章节：监控功能说明 + holdings.json 配置方法 + 手动采集用法）
-- Modify: `CHANGELOG.md`（Unreleased → 二期条目）
+- Modify: `docs/DECISIONS.md`（变更记录节追加二期条目）
 - Modify: `docs/DECISIONS.md`（若实施中决策与 D008 有偏差，追加 D010 记录）
 
 **VERIFY:**
@@ -397,6 +397,6 @@ def test_single_collector_failure_isolated():
 - [ ] `ruff check .` / `black --check .` / `mypy app` 零错误
 - [ ] `streamlit run app/ui/webapp.py`：左侧菜单双页可切换；监控页点采集→报告展示→事件列表→一键入库知识库→投研顾问可检索引用
 - [ ] 一期全部测试无回归（61+ 通过）
-- [ ] CHANGELOG / DECISIONS / README 同步
+- [ ] DECISIONS（变更记录）/ README 同步
 - [ ] 每个 Task 独立 commit
 

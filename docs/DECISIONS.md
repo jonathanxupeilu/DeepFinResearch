@@ -1,7 +1,8 @@
 # 项目决策日志
 
-> 记录所有影响项目方向的决策：背景、选项、结论、理由。新决策追加在末尾，**只增不改**（推翻旧决策时新增条目并注明取代关系）。
-> 配套文档：设计文档 `docs/plans/`、变更记录 `CHANGELOG.md`。
+> 记录所有影响项目方向的决策与显著变更：背景、选项、结论、理由。新条目追加在末尾，**只增不改**（推翻旧决策时新增条目并注明取代关系）。
+> 决策记「D 编号」节，工程变更记「变更记录」节（原 CHANGELOG.md 已并入，2026-10-30 起**本项目不再单独维护 CHANGELOG**）。
+> 配套文档：设计文档 `docs/plans/`。
 
 ---
 
@@ -60,4 +61,50 @@
 
 ## D009 · 决策日志制度（2026-10-30）
 
-建立本日志：所有影响方向/架构/范围的决策单独记录于 `docs/DECISIONS.md`，只增不改，便于后续梳理项目思路。工程执行类细节仍在 CHANGELOG 与设计文档中。
+建立本日志：所有影响方向/架构/范围的决策单独记录于 `docs/DECISIONS.md`，只增不改，便于后续梳理项目思路。工程执行类细节仍在设计文档中。
+（2026-10-30 补充：应用户要求，当日创建的 CHANGELOG.md 并入本文件「变更记录」节，后续变更直接记于此。）
+
+---
+
+# 变更记录（原 CHANGELOG.md 内容并入）
+
+## [Unreleased]（2026-10-30 · 二期 backlog 清理）
+
+### Fixed
+- **embedding 截断保护**：截断上限由 6000 字符修正为 12000 字符，依据官方
+  text-embedding-v3 单条 8192 token 限制（中文 ~1.5 字符/token 保守换算）（`app/llm/embedding.py`）
+
+### Added
+- **引用精确解析**：回答中实际标注 `[n]` 才保留对应引用来源；越界编号忽略；
+  无任何标注时保留全部来源不丢信息（`app/pipeline/rag.py`）
+
+### Changed
+- **Streamlit pipeline 缓存**：`webapp.py` 用 `st.cache_resource` 会话间复用
+  pipeline；`factory.py` 保持框架无关以继续服务 CLI 与测试
+
+## [v0.1.0] - 2026-10-29
+
+一期：本地 RAG 问答助手完整交付（13 个 TDD 任务，子 Agent 驱动 + 每任务规格/质量双审查 + 整体终审）。
+
+### Added
+- 文档入库：md/txt/pdf/docx 加载 → 段落聚合切片（可配 chunk_size/overlap）→
+  DashScope text-embedding-v3 向量化（分批/重试/截断保护）→ Chroma 持久化（cosine 空间）
+- 入库去重：内容 hash 相同跳过；文档更新自动删旧重建；ids 含 source 防跨文档覆盖
+- 检索：top-k + 余弦相似度阈值过滤，空结果诚实拒答（不硬答）
+- 生成：prompt 组装唯一收口于 pipeline，system prompt 强约束"仅依据上下文"，
+  角色化 system prompt 可注入（为五期多 Agent 预留）
+- 双入口：Streamlit 网页版（聊天 + 知识库管理）与 CLI REPL，均带引用展示
+- 闲聊分流：打招呼/感谢/告别完整匹配时跳过检索直接回复
+- 配置：Pydantic Settings + `.env`（DeepSeek + DashScope 双 Key）
+- 测试体系：unit/integration/e2e 三层；mock 隔离、真实 API 冒烟、无 Key 自动 skip
+
+### Fixed
+- Chroma collection 显式指定 cosine 度量空间（默认 l2 会致相似度换算错误）
+- 上传文件名路径穿越防护（剥离目录成分）
+- tenacity 重试限定可恢复异常（限流/连接）+ `reraise=True` 保留真实根因
+- Streamlit 运行时 `app` 包遮蔽（`app.py` 改名 `webapp.py` + 项目根路径自举）
+- CLI REPL 运行时容错（API 异常不杀会话）+ 缺 Key 友好提示
+
+### Quality
+- 61 unit/integration 测试 + e2e 真实 API 冒烟全绿
+- ruff / black / mypy 零错误
