@@ -4,11 +4,13 @@ from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 
+from typing_extensions import Self
+
 from app.monitor.models import Dimension, MonitorEvent
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY,
     dimension TEXT NOT NULL,
     title TEXT NOT NULL,
     content TEXT NOT NULL DEFAULT '',
@@ -21,10 +23,12 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_dim_time ON events(dimension, published_at DESC);
 """
 
+_US = "\x1f"  # ASCII 单元分隔符，避免字段拼接歧义
+
 
 def _content_hash(e: MonitorEvent) -> str:
-    raw = f"{e.dimension.value}{e.title}{e.url}{e.content}"
-    return sha256(raw.encode("utf-8")).hexdigest()[:16]
+    raw = _US.join((e.dimension.value, e.title, e.url, e.content))
+    return sha256(raw.encode("utf-8")).hexdigest()
 
 
 class EventStore:
@@ -32,28 +36,41 @@ class EventStore:
         self._conn = sqlite3.connect(db_path)
         self._conn.executescript(_SCHEMA)
 
+    def close(self) -> None:
+        self._conn.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
     def save_events(self, events: list[MonitorEvent]) -> tuple[int, int]:
         added = skipped = 0
-        for e in events:
-            cur = self._conn.execute(
-                "INSERT OR IGNORE INTO events (dimension, title, content, url, source,"
-                " published_at, collected_at, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    e.dimension.value,
-                    e.title,
-                    e.content,
-                    e.url,
-                    e.source,
-                    e.published_at.isoformat() if e.published_at else None,
-                    e.collected_at.isoformat(),
-                    _content_hash(e),
-                ),
-            )
-            if cur.rowcount == 1:
-                added += 1
-            else:
-                skipped += 1
-        self._conn.commit()
+        try:
+            for e in events:
+                cur = self._conn.execute(
+                    "INSERT OR IGNORE INTO events (dimension, title, content, url, source,"
+                    " published_at, collected_at, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        e.dimension.value,
+                        e.title,
+                        e.content,
+                        e.url,
+                        e.source,
+                        e.published_at.isoformat() if e.published_at else None,
+                        e.collected_at.isoformat(),
+                        _content_hash(e),
+                    ),
+                )
+                if cur.rowcount == 1:
+                    added += 1
+                else:
+                    skipped += 1
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
         return added, skipped
 
     def list_events(
@@ -84,6 +101,7 @@ class EventStore:
         ]
 
     def counts_by_dimension(self) -> dict[Dimension, int]:
+        """按维度统计事件数。注意：无事件的维度不会出现在返回的 dict 中。"""
         rows = self._conn.execute(
             "SELECT dimension, COUNT(*) FROM events GROUP BY dimension"
         ).fetchall()
