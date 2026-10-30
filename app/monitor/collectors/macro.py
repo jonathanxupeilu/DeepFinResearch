@@ -17,25 +17,27 @@ class MacroCollector:
         self._ak = ak
 
     def collect(self) -> list[MonitorEvent]:
+        # (标题, 接口, 取数列, 接口名字符串)——source 用显式接口名，避免生产/Mock 下命名漂移
         indicators = [
-            ("PMI", self._ak.macro_china_pmi, "制造业-同比增长"),
-            ("CPI", self._ak.macro_china_cpi, "全国同比增长"),
-            ("社融增量", self._ak.macro_china_shrzgm, "当月值"),
+            ("PMI", self._ak.macro_china_pmi, "制造业-同比增长", "macro_china_pmi"),
+            ("CPI", self._ak.macro_china_cpi, "全国同比增长", "macro_china_cpi"),
+            ("社融增量", self._ak.macro_china_shrzgm, "当月值", "macro_china_shrzgm"),
         ]
         events: list[MonitorEvent] = []
-        for name, func, column in indicators:
+        for name, func, column, api_name in indicators:
             try:
                 df: pd.DataFrame = func()
                 if not isinstance(df, pd.DataFrame) or df.empty:
                     raise ValueError("返回数据非 DataFrame 或为空")
                 row = df.iloc[-1]
-                content = f"{name} {column}: {row[column]}（{row['月份']}）"
+                content = f"{name}: {row[column]}（{row['月份']}）"
                 events.append(
                     MonitorEvent(
                         dimension=self.dimension,
                         title=name,
-                        source=f"akshare:{func.__name__ if hasattr(func, '__name__') else name}",
+                        source=f"akshare:{api_name}",
                         content=content,
+                        # 月份字符串解析暂不实现（YAGNI，既定决策）
                         published_at=None,
                     )
                 )

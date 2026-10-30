@@ -1,5 +1,6 @@
 # app/monitor/collectors/news.py
 import logging
+from datetime import datetime
 
 import pandas as pd
 
@@ -19,25 +20,38 @@ class NewsCollector:
     def collect(self) -> list[MonitorEvent]:
         try:
             df: pd.DataFrame = self._ak.stock_info_global_cls()
-            events: list[MonitorEvent] = []
-            for _, row in df.iterrows():
-                events.append(
-                    MonitorEvent(
-                        dimension=self.dimension,
-                        title=str(row["标题"]),
-                        source="cls",
-                        content=str(row["内容"]),
-                        published_at=self._parse_time(row["发布时间"]),
-                    )
-                )
-            return events
         except Exception as e:  # noqa: BLE001 接口异常降级为空结果
             logger.warning("财联社电报采集失败: %s", e)
             return []
+        events: list[MonitorEvent] = []
+        for _, row in df.iterrows():
+            # 逐行容错：单行缺列/NaN 只跳过该行，不丢整批事件
+            try:
+                title = row.get("标题")
+                content = row.get("内容", "")
+                if pd.isna(title):
+                    logger.warning("跳过坏行（标题缺失）")
+                    continue
+                if pd.isna(content):
+                    content = ""
+                events.append(
+                    MonitorEvent(
+                        dimension=self.dimension,
+                        title=str(title),
+                        source="cls",
+                        content=str(content),
+                        published_at=self._parse_time(row.get("发布时间")),
+                    )
+                )
+            except Exception as e:  # noqa: BLE001 单行坏数据只跳过该行
+                logger.warning("跳过坏行: %s", e)
+        return events
 
     @staticmethod
-    def _parse_time(value) -> object:
+    def _parse_time(value) -> datetime | None:
         try:
+            if pd.isna(value):
+                return None
             return pd.to_datetime(value, utc=True).to_pydatetime()
         except Exception:  # noqa: BLE001 时间解析易错，失败置 None
             return None
