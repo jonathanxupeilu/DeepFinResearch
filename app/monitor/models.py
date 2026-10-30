@@ -1,5 +1,5 @@
 # app/monitor/models.py
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
@@ -21,7 +21,7 @@ class MonitorEvent(BaseModel):
     content: str = ""
     url: str = ""
     published_at: datetime | None = None
-    collected_at: datetime = Field(default_factory=datetime.now)
+    collected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_validator("title", "source")
     @classmethod
