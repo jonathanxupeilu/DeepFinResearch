@@ -69,6 +69,11 @@ def test_run_all_empty_collectors():
     assert runner.run_all() == []
 
 
+def test_store_property_returns_injected_store():
+    runner, store = make_runner([])
+    assert runner.store is store
+
+
 def test_collect_returns_empty_is_ok():
     c1 = MagicMock()
     c1.dimension, c1.collect = Dimension.NEWS, list

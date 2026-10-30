@@ -16,6 +16,11 @@ class MonitorRunner:
         self._store = store
         self._collectors = collectors
 
+    @property
+    def store(self) -> EventStore:
+        """公开只读访问底层 EventStore，供 UI 侧显式管理连接生命周期。"""
+        return self._store
+
     def run_all(self) -> list[CollectReport]:
         reports: list[CollectReport] = []
         for collector in self._collectors:

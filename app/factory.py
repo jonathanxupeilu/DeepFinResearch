@@ -45,14 +45,20 @@ def build_ingest_components() -> Indexer:
     return Indexer(store, embedder, s.chunk_size, s.chunk_overlap)
 
 
+def build_monitor_store() -> EventStore:
+    """供 UI 只读路径使用：仅打开 EventStore，不构造 6 个采集器。"""
+    return EventStore(get_settings().monitor_db_path)
+
+
 def build_monitor_runner() -> MonitorRunner:
     s = get_settings()
-    store = EventStore(s.monitor_db_path)
+    # 先加载持仓再开数据库连接，避免加载失败时泄漏已打开的连接
     try:
         holdings: list[Holding] = load_holdings()
     except FileNotFoundError:
         logger.warning("config/holdings.json 不存在，持仓公告维度将无数据")
         holdings = []
+    store = EventStore(s.monitor_db_path)
     collectors: list[Collector] = [
         AnnouncementsCollector(holdings),
         NewsCollector(),
