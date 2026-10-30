@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 # streamlit run 会把本文件所在目录插到 sys.path 前面，
-# 显式把项目根放到最前，保证 `import app` 解析到项目包
+# 显式把项目根放到最前，保证本模块被独立导入时也可解析 app 包
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
