@@ -15,6 +15,16 @@ from app.models import Document, RagAnswer
 st.set_page_config(page_title="DeepFinResearch", page_icon="⚙️")
 st.title("⚙️ DeepFinResearch · 本地知识库问答")
 
+
+@st.cache_resource
+def get_pipeline():
+    """会话间复用 pipeline（Chroma 连接/Embedder/LLM 客户端）。
+
+    放在 UI 层而非 factory：factory 还服务 CLI 与测试，须保持框架无关。
+    """
+    return build_pipeline()
+
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -50,7 +60,7 @@ if question := st.chat_input("输入你的问题…"):
         with st.spinner("检索知识库并生成回答…"):
             result: RagAnswer | None
             try:
-                result = build_pipeline().answer(question)
+                result = get_pipeline().answer(question)
             except Exception:  # noqa: BLE001 — UI 兜底，任何生成异常都转为错误提示
                 result = None
         if result is None:
