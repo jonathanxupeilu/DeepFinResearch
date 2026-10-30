@@ -21,7 +21,7 @@ _KEYWORDS = ("FOMC", "美联储", "利率决议")
 class FedCollector(AkshareCollector):
     dimension = Dimension.FED
 
-    def collect(self) -> list[MonitorEvent]:
+    def collect(self, since: datetime | None = None) -> list[MonitorEvent]:
         # date 默认硬编码 '20241107'，必须显式传当天
         df = self._fetch_or_none(
             self._ak.news_economic_baidu, date=datetime.now().strftime("%Y%m%d")

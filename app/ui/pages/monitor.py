@@ -18,6 +18,7 @@ from app.monitor.holdings import DEFAULT_HOLDINGS_PATH as HOLDINGS_PATH
 from app.monitor.models import CollectReport, Dimension, MonitorEvent
 
 _REPORTS_KEY = "collect_reports"
+_RETENTION_DAYS = 30  # 事件保留天数：超过自动清理
 
 
 def _show_holdings_hint() -> None:
@@ -43,16 +44,31 @@ def _show_metrics() -> None:
 
 
 def _collect_now() -> None:
+    reports: list[CollectReport] = []
+    purged = 0
     try:
-        with st.spinner("正在采集六维度数据…"):
+        with st.status("正在采集六维度数据…", expanded=True) as status:
             runner = build_monitor_runner()
             try:
-                reports = runner.run_all()
+
+                def _on_report(r: CollectReport) -> None:
+                    reports.append(r)
+                    if r.ok:
+                        status.write(f"✅ {r.dimension.value}：新增 {r.added} 条")
+                    else:
+                        status.write(f"❌ {r.dimension.value}：{r.error}")
+
+                runner.run_all(on_report=_on_report)
+                # 存量过时自动清理
+                purged = runner.store.purge_before(_RETENTION_DAYS)
             finally:
                 runner.store.close()
+        status.update(label="采集完成", state="complete", expanded=False)
     except Exception:  # noqa: BLE001 — UI 兜底，采集异常转为错误提示
         st.error("采集失败，请稍后重试")
         return
+    if purged:
+        st.caption(f"🧹 已自动清理 {purged} 条超过 {_RETENTION_DAYS} 天的过期事件")
     st.session_state[_REPORTS_KEY] = reports
 
 

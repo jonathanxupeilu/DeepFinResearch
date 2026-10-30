@@ -54,3 +54,12 @@ def test_index_empty_document_skipped(tmp_path: Path):
     idx = make_indexer(tmp_path)
     r = idx.index_document(Document(source="empty.md", content="   \n  "))
     assert r.skipped and idx.store.count() == 0
+
+
+def test_metadata_contains_indexed_at(tmp_path: Path):
+    # 统计卡片需要入库时间来展示「最新入库」；旧数据无此字段由 stats 层兜底
+    idx = make_indexer(tmp_path)
+    idx.index_document(Document(source="a.md", content="内容文字。" * 30))
+    metas = idx.store.get_all_metadatas()
+    assert metas
+    assert all("indexed_at" in m for m in metas)

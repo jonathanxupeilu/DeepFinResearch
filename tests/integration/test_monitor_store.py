@@ -99,3 +99,36 @@ def test_tz_roundtrip(tmp_path):
     assert got[0].published_at.tzinfo is not None
     assert got[0].published_at == dt
     assert got[0].collected_at.tzinfo is not None
+
+
+def test_last_collect_roundtrip(tmp_path):
+    s = EventStore(tmp_path / "m.db")
+    assert s.get_last_collect(Dimension.NEWS) is None
+    dt = datetime(2026, 10, 30, 8, 0, tzinfo=timezone.utc)
+    s.set_last_collect(Dimension.NEWS, dt)
+    assert s.get_last_collect(Dimension.NEWS) == dt
+    # 覆盖写
+    dt2 = datetime(2026, 10, 30, 9, 0, tzinfo=timezone.utc)
+    s.set_last_collect(Dimension.NEWS, dt2)
+    assert s.get_last_collect(Dimension.NEWS) == dt2
+    assert s.get_last_collect(Dimension.MACRO) is None
+
+
+def test_purge_before_removes_only_old(tmp_path):
+    s = EventStore(tmp_path / "m.db")
+    old = make_event(
+        "旧事件", collected_at=datetime(2026, 9, 1, tzinfo=timezone.utc)
+    )
+    fresh = make_event("新事件")
+    s.save_events([old, fresh])
+    purged = s.purge_before(days=30)
+    assert purged == 1
+    assert s.count() == 1
+    assert s.list_events()[0].title == "新事件"
+
+
+def test_purge_before_keeps_everything_when_none_old(tmp_path):
+    s = EventStore(tmp_path / "m.db")
+    s.save_events([make_event("a"), make_event("b")])
+    assert s.purge_before(days=30) == 0
+    assert s.count() == 2

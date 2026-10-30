@@ -41,6 +41,11 @@ class VectorStore:
         metadatas = got["metadatas"] or []
         return sorted({str(m["source"]) for m in metadatas})
 
+    def get_all_metadatas(self) -> list[dict]:
+        """全部切片元数据（source/doc_id/chunk_index/indexed_at），供统计聚合。"""
+        got = self.collection.get(include=["metadatas"])
+        return [dict(m) for m in (got["metadatas"] or [])]
+
     def get_by_source(self, source: str) -> str | None:
         got = self.collection.get(where={"source": source}, include=["metadatas"])
         if not got["metadatas"]:

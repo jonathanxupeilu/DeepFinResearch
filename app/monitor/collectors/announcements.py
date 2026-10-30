@@ -34,10 +34,10 @@ class AnnouncementsCollector(AkshareCollector):
         super().__init__(ak, request_timeout=request_timeout)
         self._holdings = holdings
 
-    def collect(self) -> list[MonitorEvent]:
+    def collect(self, since: datetime | None = None) -> list[MonitorEvent]:
         if not self._holdings:
             return []
-        df = self._fetch_window()
+        df = self._fetch_window(since)
         if df is None or df.empty:
             return []
         events: list[MonitorEvent] = []
@@ -73,10 +73,18 @@ class AnnouncementsCollector(AkshareCollector):
                 logger.warning("跳过坏行: %s", e)
         return events
 
-    def _fetch_window(self) -> pd.DataFrame | None:
-        """逐日采集近 7 天（含今天）的公告并合并；单日失败/超时跳过。"""
+    def _fetch_window(self, since: datetime | None = None) -> pd.DataFrame | None:
+        """逐日采集近 N 天（含今天）的公告并合并；单日失败/超时跳过。
+
+        since 为该维度上次成功采集水位线：窗口 = 距今天数+1，夹在 [1, 7]。
+        首次采集（since 为空）保持 7 天全量窗口。
+        """
+        window_days = _WINDOW_DAYS
+        if since is not None:
+            elapsed = (datetime.now().date() - since.date()).days
+            window_days = min(max(elapsed + 1, 1), _WINDOW_DAYS)
         frames: list[pd.DataFrame] = []
-        for offset in range(_WINDOW_DAYS):
+        for offset in range(window_days):
             date = (datetime.now() - timedelta(days=offset)).strftime("%Y%m%d")
             # 走基类超时保护：单日卡死/异常均降级为 None 跳过
             df = self._fetch_or_none(

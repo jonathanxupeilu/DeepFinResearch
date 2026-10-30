@@ -18,7 +18,7 @@ class PolicyCollector:
     def __init__(self, calendar_path: Path = _DEFAULT_CALENDAR) -> None:
         self.calendar_path = calendar_path
 
-    def collect(self) -> list[MonitorEvent]:
+    def collect(self, since: datetime | None = None) -> list[MonitorEvent]:
         try:
             data = json.loads(self.calendar_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as e:

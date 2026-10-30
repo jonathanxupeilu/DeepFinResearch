@@ -1,6 +1,6 @@
 # app/monitor/store.py
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
 
@@ -21,6 +21,11 @@ CREATE TABLE IF NOT EXISTS events (
     content_hash TEXT NOT NULL UNIQUE
 );
 CREATE INDEX IF NOT EXISTS idx_events_dim_time ON events(dimension, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_collected ON events(collected_at);
+CREATE TABLE IF NOT EXISTS collect_state (
+    dimension TEXT PRIMARY KEY,
+    last_collect TEXT NOT NULL
+);
 """
 
 _US = "\x1f"  # ASCII 单元分隔符，避免字段拼接歧义
@@ -110,3 +115,28 @@ class EventStore:
     def count(self) -> int:
         (n,) = self._conn.execute("SELECT COUNT(*) FROM events").fetchone()
         return n
+
+    def get_last_collect(self, dimension: Dimension) -> datetime | None:
+        """该维度上次成功采集的水位线（UTC）；从未采集过返回 None。"""
+        row = self._conn.execute(
+            "SELECT last_collect FROM collect_state WHERE dimension = ?",
+            (dimension.value,),
+        ).fetchone()
+        return datetime.fromisoformat(row[0]) if row else None
+
+    def set_last_collect(self, dimension: Dimension, dt: datetime) -> None:
+        self._conn.execute(
+            "INSERT INTO collect_state (dimension, last_collect) VALUES (?, ?)"
+            " ON CONFLICT(dimension) DO UPDATE SET last_collect = excluded.last_collect",
+            (dimension.value, dt.isoformat()),
+        )
+        self._conn.commit()
+
+    def purge_before(self, days: int, now: datetime | None = None) -> int:
+        """删除 collected_at 早于 now-days 的事件，返回删除条数（存量过时自动清理）。"""
+        cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=days)
+        cur = self._conn.execute(
+            "DELETE FROM events WHERE collected_at < ?", (cutoff.isoformat(),)
+        )
+        self._conn.commit()
+        return cur.rowcount

@@ -1,5 +1,6 @@
 # app/monitor/collectors/industry.py
 import logging
+from datetime import datetime
 
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -18,7 +19,7 @@ _BDI_CLOSE_COL = "最新值"
 class IndustryCollector(AkshareCollector):
     dimension = Dimension.INDUSTRY
 
-    def collect(self) -> list[MonitorEvent]:
+    def collect(self, since: datetime | None = None) -> list[MonitorEvent]:
         # (标题, 接口, 日期列, 数值列, 接口名字符串)
         indicators = [
             (

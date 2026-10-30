@@ -8,9 +8,12 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 import streamlit as st
 
+from app.config import get_settings
 from app.factory import build_ingest_components, build_pipeline
 from app.ingest.loaders import load_file
 from app.models import Document, RagAnswer
+from app.retrieval.stats import build_library_stats
+from app.retrieval.store import VectorStore
 
 
 @st.cache_resource
@@ -22,9 +25,42 @@ def get_pipeline():
     return build_pipeline()
 
 
+@st.cache_resource
+def get_vector_store() -> VectorStore:
+    """会话间复用向量库连接（只读统计用途）。"""
+    return VectorStore(persist_dir=get_settings().chroma_dir)
+
+
+def _show_library_card() -> None:
+    """RAG 离线仓库概览：存量文章数、分类分布、最新入库。"""
+    try:
+        stats = build_library_stats(get_vector_store().get_all_metadatas())
+    except Exception:  # noqa: BLE001 — UI 兜底，统计异常不影响问答主功能
+        return
+    if stats.articles == 0:
+        return
+    with st.container(border=True):
+        col1, col2 = st.columns(2)
+        col1.metric("📚 存量文章", f"{stats.articles} 篇")
+        col2.metric("🧩 切片总数", f"{stats.chunks} 块")
+        cats = " · ".join(
+            f"{name} ({n})"
+            for name, n in sorted(stats.categories.items(), key=lambda kv: -kv[1])
+        )
+        st.caption(f"分类：{cats or '—'}")
+        if stats.latest_title:
+            when = (
+                f"（{stats.latest_time.strftime('%m-%d %H:%M')}）"
+                if stats.latest_time
+                else ""
+            )
+            st.caption(f"🆕 最新入库：《{stats.latest_title}》{when}")
+
+
 def render() -> None:
     st.set_page_config(page_title="DeepFinResearch", page_icon="⚙️")
     st.title("⚙️ DeepFinResearch · 本地知识库问答")
+    _show_library_card()
 
     if "messages" not in st.session_state:
         st.session_state.messages = []

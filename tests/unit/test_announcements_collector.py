@@ -1,6 +1,6 @@
 # tests/unit/test_announcements_collector.py
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -180,3 +180,24 @@ def test_real_structure_url_column_present():
     assert len(events) == 1
     assert events[0].url == "https://www.sse.com.cn/disclosure.pdf"
     assert events[0].published_at is not None
+
+
+def test_since_shrinks_window():
+    # B：传入上次采集时间后，只回补缺失的天（今天 + 距今天数），不再是固定 7 天
+    ak = MagicMock()
+    ak.stock_notice_report.return_value = make_df(["600519"])
+    holdings = [Holding(code="600519")]
+    since = datetime.now(timezone.utc) - timedelta(days=3)
+    events = AnnouncementsCollector(holdings=holdings, ak=ak).collect(since=since)
+    assert ak.stock_notice_report.call_count == 4  # 今天 + 前 3 天
+    assert len(events) == 4
+
+
+def test_since_recent_clamped_to_at_least_today():
+    # B：上次采集就在今天 → 仍至少采今天 1 天，不出现 0 天窗口
+    ak = MagicMock()
+    ak.stock_notice_report.return_value = make_df(["600519"])
+    holdings = [Holding(code="600519")]
+    since = datetime.now(timezone.utc) - timedelta(hours=1)
+    AnnouncementsCollector(holdings=holdings, ak=ak).collect(since=since)
+    assert ak.stock_notice_report.call_count == 1

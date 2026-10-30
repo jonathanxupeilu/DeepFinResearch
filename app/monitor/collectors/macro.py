@@ -1,5 +1,6 @@
 # app/monitor/collectors/macro.py
 import logging
+from datetime import datetime
 
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 class MacroCollector(AkshareCollector):
     dimension = Dimension.MACRO
 
-    def collect(self) -> list[MonitorEvent]:
+    def collect(self, since: datetime | None = None) -> list[MonitorEvent]:
         # (标题, 接口, 取数列, 接口名字符串)——source 用显式接口名，避免生产/Mock 下命名漂移
         indicators = [
             ("PMI", self._ak.macro_china_pmi, "制造业-同比增长", "macro_china_pmi"),

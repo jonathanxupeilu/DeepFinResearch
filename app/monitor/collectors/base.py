@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class Collector(Protocol):
     dimension: Dimension
 
-    def collect(self) -> list[MonitorEvent]: ...
+    def collect(self, since: datetime | None = None) -> list[MonitorEvent]: ...
 
 
 class AkshareCollector:

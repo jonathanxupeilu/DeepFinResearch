@@ -1,5 +1,6 @@
 # app/monitor/collectors/news.py
 import logging
+from datetime import datetime
 
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -18,7 +19,7 @@ _COL_CONTENT = "内容"
 class NewsCollector(AkshareCollector):
     dimension = Dimension.NEWS
 
-    def collect(self) -> list[MonitorEvent]:
+    def collect(self, since: datetime | None = None) -> list[MonitorEvent]:
         df = self._fetch_or_none(self._ak.stock_info_global_cls)
         if not isinstance(df, pd.DataFrame) or df.empty:
             return []
