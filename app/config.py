@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     score_threshold: float = 0.3
     chroma_dir: Path = Path("data/chroma")
     knowledge_dir: Path = Path("knowledge")
+    monitor_db_path: Path = Path("data/monitor.db")
 
 
 @lru_cache
