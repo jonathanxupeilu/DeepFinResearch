@@ -1,26 +1,22 @@
 # app/monitor/collectors/industry.py
 import logging
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
+from app.monitor.collectors.base import AkshareCollector
 from app.monitor.models import Dimension, MonitorEvent
 
 logger = logging.getLogger(__name__)
 
 # 列名映射集中常量——真实接口列名冒烟时只改这里
-SGE_DATE_COL = "date"
-SGE_CLOSE_COL = "Au99.99收盘"
-BDI_DATE_COL = "日期"
-BDI_CLOSE_COL = "收盘"
+_SGE_DATE_COL = "date"
+_SGE_CLOSE_COL = "Au99.99收盘"
+_BDI_DATE_COL = "日期"
+_BDI_CLOSE_COL = "收盘"
 
 
-class IndustryCollector:
+class IndustryCollector(AkshareCollector):
     dimension = Dimension.INDUSTRY
-
-    def __init__(self, ak=None):
-        if ak is None:
-            import akshare as ak
-        self._ak = ak
 
     def collect(self) -> list[MonitorEvent]:
         # (标题, 接口, 日期列, 数值列, 接口名字符串)
@@ -28,15 +24,15 @@ class IndustryCollector:
             (
                 "黄金",
                 self._ak.spot_hist_sge,
-                SGE_DATE_COL,
-                SGE_CLOSE_COL,
+                _SGE_DATE_COL,
+                _SGE_CLOSE_COL,
                 "spot_hist_sge",
             ),
             (
                 "BDI运价",
                 self._ak.index_bdi_hist,
-                BDI_DATE_COL,
-                BDI_CLOSE_COL,
+                _BDI_DATE_COL,
+                _BDI_CLOSE_COL,
                 "index_bdi_hist",
             ),
         ]
@@ -47,6 +43,10 @@ class IndustryCollector:
                 if not isinstance(df, pd.DataFrame) or df.empty:
                     raise ValueError("返回数据非 DataFrame 或为空")
                 row = df.iloc[-1]
+                # I4 防御：末行日期/数值为 NaN 时跳过，不产出脏事件
+                if pd.isna(row[date_col]) or pd.isna(row[value_col]):
+                    logger.warning("行业指标 %s 末行日期/数值为 NaN，跳过", name)
+                    continue
                 content = f"{name}: {row[value_col]}（{row[date_col]}）"
                 events.append(
                     MonitorEvent(
@@ -54,18 +54,9 @@ class IndustryCollector:
                         title=name,
                         source=f"akshare:{api_name}",
                         content=content,
-                        published_at=self._parse_date(row[date_col]),
+                        published_at=self._parse_datetime(row[date_col]),
                     )
                 )
             except Exception as e:  # noqa: BLE001 单指标失败不炸整体
                 logger.warning("行业指标 %s 采集失败: %s", name, e)
         return events
-
-    @staticmethod
-    def _parse_date(value) -> pd.Timestamp | None:
-        try:
-            if pd.isna(value):
-                return None
-            return pd.to_datetime(value, utc=True).to_pydatetime()
-        except Exception:  # noqa: BLE001 日期解析易错，失败置 None
-            return None

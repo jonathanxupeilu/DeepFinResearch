@@ -1,34 +1,32 @@
 # app/monitor/collectors/news.py
 import logging
-from datetime import datetime
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
+from app.monitor.collectors.base import AkshareCollector
 from app.monitor.models import Dimension, MonitorEvent
 
 logger = logging.getLogger(__name__)
 
+# 列名映射集中常量——真实接口列名冒烟时只改这里
+_COL_TITLE = "标题"
+_COL_CONTENT = "内容"
+_COL_TIME = "发布时间"
 
-class NewsCollector:
+
+class NewsCollector(AkshareCollector):
     dimension = Dimension.NEWS
 
-    def __init__(self, ak=None):
-        if ak is None:
-            import akshare as ak
-        self._ak = ak
-
     def collect(self) -> list[MonitorEvent]:
-        try:
-            df: pd.DataFrame = self._ak.stock_info_global_cls()
-        except Exception as e:  # noqa: BLE001 接口异常降级为空结果
-            logger.warning("财联社电报采集失败: %s", e)
+        df = self._fetch_or_none(self._ak.stock_info_global_cls)
+        if not isinstance(df, pd.DataFrame) or df.empty:
             return []
         events: list[MonitorEvent] = []
         for _, row in df.iterrows():
             # 逐行容错：单行缺列/NaN 只跳过该行，不丢整批事件
             try:
-                title = row.get("标题")
-                content = row.get("内容", "")
+                title = row.get(_COL_TITLE)
+                content = row.get(_COL_CONTENT, "")
                 if pd.isna(title):
                     logger.warning("跳过坏行（标题缺失）")
                     continue
@@ -40,18 +38,9 @@ class NewsCollector:
                         title=str(title),
                         source="cls",
                         content=str(content),
-                        published_at=self._parse_time(row.get("发布时间")),
+                        published_at=self._parse_datetime(row.get(_COL_TIME)),
                     )
                 )
             except Exception as e:  # noqa: BLE001 单行坏数据只跳过该行
                 logger.warning("跳过坏行: %s", e)
         return events
-
-    @staticmethod
-    def _parse_time(value) -> datetime | None:
-        try:
-            if pd.isna(value):
-                return None
-            return pd.to_datetime(value, utc=True).to_pydatetime()
-        except Exception:  # noqa: BLE001 时间解析易错，失败置 None
-            return None

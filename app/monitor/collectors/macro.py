@@ -1,20 +1,16 @@
 # app/monitor/collectors/macro.py
 import logging
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
+from app.monitor.collectors.base import AkshareCollector
 from app.monitor.models import Dimension, MonitorEvent
 
 logger = logging.getLogger(__name__)
 
 
-class MacroCollector:
+class MacroCollector(AkshareCollector):
     dimension = Dimension.MACRO
-
-    def __init__(self, ak=None):
-        if ak is None:
-            import akshare as ak
-        self._ak = ak
 
     def collect(self) -> list[MonitorEvent]:
         # (标题, 接口, 取数列, 接口名字符串)——source 用显式接口名，避免生产/Mock 下命名漂移
@@ -26,7 +22,7 @@ class MacroCollector:
         events: list[MonitorEvent] = []
         for name, func, column, api_name in indicators:
             try:
-                df: pd.DataFrame = func()
+                df: pd.DataFrame = self._fetch_or_none(func)
                 if not isinstance(df, pd.DataFrame) or df.empty:
                     raise ValueError("返回数据非 DataFrame 或为空")
                 row = df.iloc[-1]
