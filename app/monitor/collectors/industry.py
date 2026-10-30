@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 # 列名映射集中常量——真实接口列名冒烟时只改这里
 _SGE_DATE_COL = "date"
-_SGE_CLOSE_COL = "Au99.99收盘"
+_SGE_CLOSE_COL = "close"
 _BDI_DATE_COL = "日期"
 _BDI_CLOSE_COL = "最新值"
 

@@ -9,7 +9,13 @@ from app.monitor.models import Dimension
 
 def fake_ak(m):
     m.spot_hist_sge.return_value = pd.DataFrame(
-        {"date": ["2026-10-29"], "Au99.99收盘": [780.5]}
+        {
+            "date": ["2026-10-29"],
+            "open": [779.0],
+            "close": [780.5],
+            "low": [778.2],
+            "high": [781.3],
+        }
     )
     m.macro_shipping_bdi.return_value = pd.DataFrame(
         {"日期": ["2026-10-29"], "最新值": [2712.0]}
@@ -39,7 +45,7 @@ def test_single_indicator_failure_isolated():
 
 def test_empty_df_skipped():
     ak = MagicMock()
-    ak.spot_hist_sge.return_value = pd.DataFrame({"date": [], "Au99.99收盘": []})
+    ak.spot_hist_sge.return_value = pd.DataFrame({"date": [], "close": []})
     ak.macro_shipping_bdi.return_value = pd.DataFrame(
         {"日期": ["2026-10-29"], "最新值": [2712.0]}
     )
@@ -51,7 +57,7 @@ def test_nan_value_row_skipped():
     # I4：末行数值为 NaN 时跳过该指标，不产出脏事件
     ak = MagicMock()
     ak.spot_hist_sge.return_value = pd.DataFrame(
-        {"date": ["2026-10-29"], "Au99.99收盘": [float("nan")]}
+        {"date": ["2026-10-29"], "close": [float("nan")]}
     )
     ak.macro_shipping_bdi.return_value = pd.DataFrame(
         {"日期": ["2026-10-29"], "最新值": [2712.0]}
@@ -64,9 +70,7 @@ def test_nan_value_row_skipped():
 def test_nan_date_row_skipped():
     # I4：末行日期为 NaN 时同样跳过
     ak = MagicMock()
-    ak.spot_hist_sge.return_value = pd.DataFrame(
-        {"date": [None], "Au99.99收盘": [780.5]}
-    )
+    ak.spot_hist_sge.return_value = pd.DataFrame({"date": [None], "close": [780.5]})
     ak.macro_shipping_bdi.return_value = pd.DataFrame(
         {"日期": ["2026-10-29"], "最新值": [2712.0]}
     )
