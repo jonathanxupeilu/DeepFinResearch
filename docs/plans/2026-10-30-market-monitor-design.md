@@ -1,6 +1,6 @@
 # 二期工程：市场监控 — 详细设计
 
-> 日期：2026-10-30 ｜ 依赖：一期 RAG 问答（v0.1.0 已交付） ｜ 状态：待确认
+> 日期：2026-10-30 ｜ 依赖：一期 RAG 问答（v0.1.0 已交付） ｜ 状态：**已交付**（含当日 D010 提速优化，实施修订见 §11）
 
 ## 1. 需求回顾与已确认选型
 
@@ -25,16 +25,18 @@ config/holdings.json        持仓股列表（手工编辑，UI 只读展示）
                                 │  按维度并发调用，单源失败不影响整体
                                 ▼
         collectors/（统一 Collector 接口，按数据源插件化）
-        ├─ announcements.py   持仓公告（akshare 巨潮公告接口）
-        ├─ news.py            每日要闻（akshare 财经新闻聚合）
+        ├─ announcements.py   持仓公告（akshare 巨潮公告接口，增量窗口回补）
+        ├─ news.py            每日要闻（akshare 财联社，独立 20s 超时）
         ├─ macro.py           宏观指标（akshare：PMI/CPI/社融…）
-        ├─ fed_meetings.py    美联储 FOMC 日历与决议（akshare）
-        ├─ policy_meetings.py 重大会议（静态日历文件 + 采集时比对）
-        └─ industry.py        行业指标（akshare：金价/运价/库存…）
+        ├─ fed.py             美联储资产负债表等（akshare）
+        ├─ policy.py          重大会议（静态日历文件 + 采集时比对）
+        └─ industry.py        行业指标（akshare：金价/运价…）
                                 │
                                 ▼
-        store.py  SQLite(data/monitor.db) 事件表
-                  URL+标题 hash 去重，按维度/时间索引
+        store.py  SQLite(data/monitor.db)
+                  events 表：内容 hash 去重，按维度/时间索引
+                  collect_state 表：每维度采集水位线（增量依据）
+                  purge_before()：超 30 天旧事件自动清理
                                 │
         面板展示 ←──────────────┘
         （可选按钮：事件文本入库知识库，复用一期 indexer）
@@ -85,7 +87,9 @@ CREATE INDEX IF NOT EXISTS idx_events_dim_time ON events(dimension, published_at
 ```
 
 - **去重**：hash 冲突静默跳过（added 计数区分新增/跳过）
-- 接口：`save_events(events) -> (added, skipped)`、`list_events(dimension, limit, since)`、`counts_by_dimension()`
+- **水位线**（D010 增）：`collect_state` 表记每维度上次成功采集时间；`get_last_collect/set_last_collect`；采集成功的维度才推进，失败维度下次重采
+- **过时清理**（D010 增）：`purge_before(days) -> int` 删除 `collected_at` 早于 now-days 的事件，采集完成后 UI 自动调用（默认 30 天）并显示清理条数
+- 接口：`save_events(events) -> (added, skipped)`、`list_events(dimension, limit)`、`counts_by_dimension()`、`get_last_collect/set_last_collect`、`purge_before`
 - 真实 SQLite + tmp_path 做 integration 测试
 
 ## 5. 采集器设计（`app/monitor/collectors/`）
@@ -95,7 +99,9 @@ CREATE INDEX IF NOT EXISTS idx_events_dim_time ON events(dimension, published_at
 ```python
 class Collector(Protocol):
     dimension: Dimension
-    def collect(self) -> list[MonitorEvent]: ...
+    def collect(self, since: datetime | None = None) -> list[MonitorEvent]: ...
+# since = 该维度上次成功采集水位线（runner 从 store 读取后传入）；
+# 公告采集器用它收缩回补窗口，其余采集器透传忽略。首次采集传 None。
 ```
 
 | Collector | akshare 接口（实施时验证可用性） | 备注 |
@@ -109,14 +115,19 @@ class Collector(Protocol):
 
 **容错约定**：每个 collector 内部 catch 全部异常并返回空列表 + 记录；`runner.run_all()` 汇总为 `CollectReport` 列表，面板显示每个维度采集状态（成功 N 条 / 失败原因）。
 
-**akshare 兼容策略**：版本钉死在 `pyproject.toml`；接口名以实施当日实测为准，设计文档中接口名为候选。
+**runner 并发语义**（D010 增）：六源线程池并发执行（网络 IO 密集），入库/水位线更新在主线程串行；`run_all(on_report=...)` 支持完成即回调（UI 实时进度），返回值保持注入顺序与完成先后无关。
+
+**分级超时**（D010 增）：基类 `_fetch_or_none` 带 ThreadPoolExecutor 超时保护（默认 60s）；新闻维度（财联社接口在本机网络持续挂起）在 factory 单独收紧为 20s。
+
+**akshare 兼容策略**：版本钉死在 `pyproject.toml`；接口名以实施当日实测为准，设计文档中接口名为候选。实测偏差：`index_bdi_hist` 已被移除→迁移 `macro_shipping_bdi`；`spot_hist_sge` 列名变为 date/close。
 
 ## 6. 前端改造（`app/ui/`）
 
-- `webapp.py` 改为 **`st.navigation` 多页**：
-  - `pages/advisor.py`：【投研顾问】— 原聊天 + 侧边栏知识库管理（原样迁移）
+- `webapp.py` 改为 **`st.navigation` 多页**（每页显式 `url_path`，避免入口函数同名导致 pathname 冲突）：
+  - `pages/advisor.py`：【投研顾问】— 聊天 + 侧边栏知识库管理 + **离线仓库概览卡片**（存量文章数/分类分布/最新入库短标题，数据来自切片元数据聚合 `app/retrieval/stats.py`；分类规则：`monitor/` 前缀→市场监控、目录前缀、纯文件名→上传文档）
   - `pages/monitor.py`：【市场监控】面板：
-    - 顶部：「立即采集」按钮 → `runner.run_all()` → 显示各维度 CollectReport
+    - 顶部：「立即采集」按钮 → `runner.run_all(on_report=...)` → `st.status` 分维度实时进度 → 显示各维度 CollectReport
+    - 采集完成后自动清理超 30 天旧事件并显示清理条数
     - 维度筛选（selectbox）+ 事件表格（时间/标题/来源/内容），按 `published_at` 倒序
     - 每维度计数徽标；空维度提示"尚未采集"
   - 启动即查库展示历史事件（无库自动建表）
@@ -152,3 +163,11 @@ UI 不做自动化测试（Streamlit 特性），语法校验 + 手动冒烟。
 - Tavily 舆情与热点事件采集器（仅留 Dimension 枚举扩展位与接口范式）
 - 事件推送通知（邮件/IM）
 - 历史指标图表化（面板只做列表展示）
+
+## 11. 实施修订记录（2026-10-30，交付后回写）
+
+1. **D010 采集提速四件套**（决策日志 D010）：① runner 串行改线程池并行 + `on_report` 完成即报；② `collect_state` 水位线 + 公告增量窗口；③ 新闻维度独立 20s 超时；④ 超 30 天事件自动清理。根因：财联社接口挂起吃满 60s、公告固定 7 天逐日全市场拉取、六源串行。预期 2 分钟 → 20-30 秒。
+2. **文件名调整**：`fed_meetings.py`→`fed.py`、`policy_meetings.py`→`policy.py`（§2 架构图已同步）。
+3. **e2e 实跑发现的 akshare 接口变更**：`index_bdi_hist` 移除→`macro_shipping_bdi`；`spot_hist_sge` 列名变为 date/close（§5 已同步）。
+4. **投研顾问页概览卡片**：新增 `app/retrieval/stats.py`（纯函数统计）+ 切片元数据 `indexed_at` 时间戳；旧数据缺该字段由统计层兜底。
+5. **修复**：`st.Page` 显式 `url_path`（双页面入口函数同名致 pathname 冲突）。

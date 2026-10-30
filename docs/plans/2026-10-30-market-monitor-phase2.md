@@ -393,10 +393,19 @@ def test_single_collector_failure_isolated():
 
 ## 完成标准（Definition of Done）
 
-- [ ] `pytest tests/unit tests/integration` 全绿（不依赖网络与真实 akshare）
-- [ ] `ruff check .` / `black --check .` / `mypy app` 零错误
-- [ ] `streamlit run app/ui/webapp.py`：左侧菜单双页可切换；监控页点采集→报告展示→事件列表→一键入库知识库→投研顾问可检索引用
-- [ ] 一期全部测试无回归（61+ 通过）
-- [ ] DECISIONS（变更记录）/ README 同步
-- [ ] 每个 Task 独立 commit
+- [x] `pytest tests/unit tests/integration` 全绿（不依赖网络与真实 akshare）
+- [x] `ruff check .` / `black --check .` / `mypy app` 零错误
+- [x] `streamlit run app/ui/webapp.py`：左侧菜单双页可切换；监控页点采集→报告展示→事件列表→一键入库知识库→投研顾问可检索引用
+- [x] 一期全部测试无回归（61+ 通过）
+- [x] DECISIONS（变更记录）/ README 同步
+- [x] 每个 Task 独立 commit
+
+---
+
+## 交付附记（2026-10-30）
+
+- 10 个任务全部交付，终审 APPROVE WITH FIXES 的 9 项（C1-C4/I1-I3/M1-M2）已按红灯→修复→绿灯闭环（a887eb8）。
+- 交付后优化 D010（d12b7b6）：并行采集 / 公告增量（collect_state 水位线）/ 新闻 20s 分级超时 / 30 天过时自动清理 / advisor 页离线仓库概览卡片（indexed_at 元数据 + stats.py）。
+- 实施偏差回写在设计文档 §11；测试基线 132 → 151（unit/integration）。
+- e2e 实跑发现并适配 akshare 变更：`index_bdi_hist`→`macro_shipping_bdi`、`spot_hist_sge` 列名 date/close（a6a913c、1a5ff23）。
 
