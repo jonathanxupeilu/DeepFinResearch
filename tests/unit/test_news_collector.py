@@ -1,4 +1,5 @@
 # tests/unit/test_news_collector.py
+from datetime import date, time
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -8,11 +9,13 @@ from app.monitor.models import Dimension
 
 
 def cls_df() -> pd.DataFrame:
+    # 真实接口 stock_info_global_cls 列结构：发布日期(date 对象) + 发布时间(time 对象)
     return pd.DataFrame(
         {
+            "发布日期": [date(2026, 10, 30)],
+            "发布时间": [time(9, 0)],
             "标题": ["央行开展逆回购"],
             "内容": ["金额1000亿"],
-            "发布时间": ["2026-10-30 09:00"],
         }
     )
 
@@ -23,7 +26,7 @@ def test_news_collects_titles():
     events = NewsCollector(ak=ak).collect()
     assert len(events) == 1
     assert events[0].dimension == Dimension.NEWS
-    assert events[0].published_at is not None
+    assert events[0].published_at is not None  # 双列组合解析成功
 
 
 def test_news_api_failure_returns_empty():
@@ -35,7 +38,12 @@ def test_news_api_failure_returns_empty():
 def test_news_bad_time_parsed_as_none():
     ak = MagicMock()
     ak.stock_info_global_cls.return_value = pd.DataFrame(
-        {"标题": ["快讯"], "内容": ["正文"], "发布时间": ["时间未知"]}
+        {
+            "发布日期": [date(2026, 10, 30)],
+            "发布时间": [None],  # 坏时间置 None，组合后解析失败
+            "标题": ["快讯"],
+            "内容": ["正文"],
+        }
     )
     events = NewsCollector(ak=ak).collect()
     assert len(events) == 1
@@ -47,8 +55,9 @@ def test_news_missing_content_column_keeps_events():
     ak = MagicMock()
     ak.stock_info_global_cls.return_value = pd.DataFrame(
         {
+            "发布日期": [date(2026, 10, 30), date(2026, 10, 30)],
+            "发布时间": [time(9, 0), time(10, 0)],
             "标题": ["央行开展逆回购", "国常会部署"],
-            "发布时间": ["2026-10-30 09:00", "2026-10-30 10:00"],
         }
     )
     events = NewsCollector(ak=ak).collect()
@@ -58,13 +67,14 @@ def test_news_missing_content_column_keeps_events():
 
 
 def test_news_bad_rows_skipped_good_rows_kept():
-    # 部分坏行（NaN 标题）不丢好行；NaN 内容置空，不产出 "nan"
+    # 部分坏行（NaN 标题）不丢好行；NaN 内容置空，不产出 "nan"；坏行时间解析置 None
     ak = MagicMock()
     ak.stock_info_global_cls.return_value = pd.DataFrame(
         {
+            "发布日期": [date(2026, 10, 30), date(2026, 10, 30), date(2026, 10, 30)],
+            "发布时间": [time(9, 0), time(9, 1), None],
             "标题": ["央行开展逆回购", None, "国常会部署"],
             "内容": ["金额1000亿", "内容", None],
-            "发布时间": ["2026-10-30 09:00", "2026-10-30 09:01", "时间未知"],
         }
     )
     events = NewsCollector(ak=ak).collect()

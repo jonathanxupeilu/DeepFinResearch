@@ -30,18 +30,22 @@ class PolicyCollector:
         high = now + timedelta(days=30)
         events: list[MonitorEvent] = []
         for item in data:
-            date = datetime.strptime(item["date"], "%Y-%m-%d").replace(
-                tzinfo=timezone.utc
-            )
-            if low <= date <= high:
-                name = item["name"]
-                events.append(
-                    MonitorEvent(
-                        dimension=self.dimension,
-                        title=f"临近：{name}（{item['date']}）",
-                        content=f"重大会议：{name}，日期 {item['date']}。",
-                        source="policy_calendar",
-                        published_at=date,
-                    )
+            # 逐条容错：坏条目（缺字段/坏日期）warning 跳过，不丢其余条目
+            try:
+                date = datetime.strptime(item["date"], "%Y-%m-%d").replace(
+                    tzinfo=timezone.utc
                 )
+                if low <= date <= high:
+                    name = item["name"]
+                    events.append(
+                        MonitorEvent(
+                            dimension=self.dimension,
+                            title=f"临近：{name}（{item['date']}）",
+                            content=f"重大会议：{name}，日期 {item['date']}。",
+                            source="policy_calendar",
+                            published_at=date,
+                        )
+                    )
+            except (KeyError, TypeError, ValueError) as e:
+                logger.warning("跳过坏条目: %s", e)
         return events

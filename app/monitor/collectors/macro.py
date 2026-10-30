@@ -16,8 +16,13 @@ class MacroCollector(AkshareCollector):
         # (标题, 接口, 取数列, 接口名字符串)——source 用显式接口名，避免生产/Mock 下命名漂移
         indicators = [
             ("PMI", self._ak.macro_china_pmi, "制造业-同比增长", "macro_china_pmi"),
-            ("CPI", self._ak.macro_china_cpi, "全国同比增长", "macro_china_cpi"),
-            ("社融增量", self._ak.macro_china_shrzgm, "当月值", "macro_china_shrzgm"),
+            ("CPI", self._ak.macro_china_cpi, "全国-同比增长", "macro_china_cpi"),
+            (
+                "社融增量",
+                self._ak.macro_china_shrzgm,
+                "社会融资规模增量",
+                "macro_china_shrzgm",
+            ),
         ]
         events: list[MonitorEvent] = []
         for name, func, column, api_name in indicators:

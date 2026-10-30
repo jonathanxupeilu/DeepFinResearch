@@ -1,6 +1,8 @@
 # app/monitor/collectors/base.py
 import logging
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
@@ -23,32 +25,50 @@ class AkshareCollector:
 
     dimension: Dimension
 
-    def __init__(self, ak: Any = None) -> None:
+    def __init__(self, ak: Any = None, request_timeout: float = 60.0) -> None:
         if ak is None:
             import akshare  # type: ignore[import-untyped]
 
             ak = akshare
         self._ak: Any = ak
+        self._request_timeout = request_timeout
 
     def _fetch_or_none(
         self, fn: Callable[..., pd.DataFrame], *args: Any, **kwargs: Any
     ) -> pd.DataFrame | None:
-        """调用 akshare 接口，异常时 warning 并降级为 None。"""
+        """调用 akshare 接口：超时或异常均 warning 并降级为 None。"""
+        executor = ThreadPoolExecutor(max_workers=1)
         try:
-            return fn(*args, **kwargs)
+            future = executor.submit(fn, *args, **kwargs)
+            return future.result(timeout=self._request_timeout)
+        except FuturesTimeoutError:
+            logger.warning(
+                "akshare 接口 %s 调用超时（>%ss），降级为空结果",
+                getattr(fn, "__name__", fn),
+                self._request_timeout,
+            )
+            return None
         except Exception as e:  # noqa: BLE001 接口异常降级为空结果
             logger.warning(
                 "akshare 接口 %s 调用失败: %s", getattr(fn, "__name__", fn), e
             )
             return None
+        finally:
+            executor.shutdown(wait=False)
 
     @staticmethod
     def _parse_datetime(value: Any) -> datetime | None:
-        """解析任意日期/时间值为 UTC datetime，失败置 None。"""
+        """解析任意日期/时间值为 UTC datetime（naive 值按北京时间本地化），失败置 None。"""
         try:
             if pd.isna(value):
                 return None
-            return pd.to_datetime(value, utc=True).to_pydatetime()
+            # akshare 返回的 naive 时间均为北京时间，本地化后统一转 UTC
+            return (
+                pd.to_datetime(value)
+                .tz_localize("Asia/Shanghai")
+                .tz_convert("UTC")
+                .to_pydatetime()
+            )
         except Exception:  # noqa: BLE001 日期解析易错，失败置 None
             return None
 

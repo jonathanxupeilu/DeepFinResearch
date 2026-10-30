@@ -77,3 +77,29 @@ def test_corrupt_calendar_returns_empty(tmp_path, caplog):
     with caplog.at_level(logging.WARNING):
         assert c.collect() == []
     assert any("日历" in r.message for r in caplog.records)
+
+
+def test_bad_item_skipped_good_items_kept(tmp_path, caplog):
+    # I3：坏条目（缺 date 字段）warning 跳过，不影响其余好条目产出
+    import json
+
+    soon = datetime.now() + timedelta(days=10)
+    soon2 = datetime.now() + timedelta(days=12)
+    f = tmp_path / "cal.json"
+    f.write_text(
+        json.dumps(
+            [
+                {"name": "缺日期的坏条目"},  # 坏：缺 date
+                {"date": f"{soon:%Y-%m-%d}", "name": "会议A"},
+                {"date": f"{soon2:%Y-%m-%d}", "name": "会议B"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    c = PolicyCollector(calendar_path=f)
+    with caplog.at_level(logging.WARNING):
+        events = c.collect()
+    assert len(events) == 2
+    assert any("坏条目" in r.message for r in caplog.records)
+    assert any("会议A" in e.title for e in events)
+    assert any("会议B" in e.title for e in events)

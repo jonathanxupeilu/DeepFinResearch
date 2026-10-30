@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 # 列名映射集中常量——真实接口列名冒烟时只改这里
 _COL_DATE = "公告日期"
 _COL_TITLE = "公告标题"
-_COL_CODE = "股票代码"
+_COL_CODE = "代码"
 _COL_TYPE = "公告类型"
+_COL_URL = "网址"
 
 # stock_notice_report 的 date 是单日参数，采集窗口为近 N 天（含今天）
 _WINDOW_DAYS = 7
@@ -29,8 +30,8 @@ def _norm_code(value: Any) -> str:
 class AnnouncementsCollector(AkshareCollector):
     dimension = Dimension.ANNOUNCEMENT
 
-    def __init__(self, holdings: list[Holding], ak=None):
-        super().__init__(ak)
+    def __init__(self, holdings: list[Holding], ak=None, request_timeout: float = 60.0):
+        super().__init__(ak, request_timeout=request_timeout)
         self._holdings = holdings
 
     def collect(self) -> list[MonitorEvent]:
@@ -55,12 +56,16 @@ class AnnouncementsCollector(AkshareCollector):
                 content = row.get(_COL_TYPE, "")
                 if pd.isna(content):
                     content = ""
+                url = row.get(_COL_URL, "")
+                if pd.isna(url):
+                    url = ""
                 events.append(
                     MonitorEvent(
                         dimension=self.dimension,
                         title=str(title),
                         source="akshare:stock_notice_report",
                         content=str(content),
+                        url=str(url),
                         published_at=self._parse_datetime(row.get(_COL_DATE)),
                     )
                 )
@@ -69,17 +74,14 @@ class AnnouncementsCollector(AkshareCollector):
         return events
 
     def _fetch_window(self) -> pd.DataFrame | None:
-        """逐日采集近 7 天（含今天）的公告并合并；单日失败跳过。"""
+        """逐日采集近 7 天（含今天）的公告并合并；单日失败/超时跳过。"""
         frames: list[pd.DataFrame] = []
         for offset in range(_WINDOW_DAYS):
             date = (datetime.now() - timedelta(days=offset)).strftime("%Y%m%d")
-            try:
-                df: pd.DataFrame = self._ak.stock_notice_report(
-                    symbol="全部", date=date
-                )
-            except Exception as e:  # noqa: BLE001 单日失败不炸整体
-                logger.warning("持仓公告 %s 单日采集失败，跳过: %s", date, e)
-                continue
+            # 走基类超时保护：单日卡死/异常均降级为 None 跳过
+            df = self._fetch_or_none(
+                self._ak.stock_notice_report, symbol="全部", date=date
+            )
             if isinstance(df, pd.DataFrame) and not df.empty:
                 frames.append(df)
         if not frames:

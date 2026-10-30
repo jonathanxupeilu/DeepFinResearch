@@ -9,9 +9,10 @@ from app.monitor.models import Dimension, MonitorEvent
 logger = logging.getLogger(__name__)
 
 # 列名映射集中常量——真实接口列名冒烟时只改这里
+_COL_DATE = "发布日期"
+_COL_TIME = "发布时间"
 _COL_TITLE = "标题"
 _COL_CONTENT = "内容"
-_COL_TIME = "发布时间"
 
 
 class NewsCollector(AkshareCollector):
@@ -38,7 +39,10 @@ class NewsCollector(AkshareCollector):
                         title=str(title),
                         source="cls",
                         content=str(content),
-                        published_at=self._parse_datetime(row.get(_COL_TIME)),
+                        # 真实接口时间为"发布日期"(date) + "发布时间"(time) 双列，组合解析
+                        published_at=self._parse_datetime(
+                            f"{row.get(_COL_DATE)} {row.get(_COL_TIME)}"
+                        ),
                     )
                 )
             except Exception as e:  # noqa: BLE001 单行坏数据只跳过该行

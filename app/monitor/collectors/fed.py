@@ -1,5 +1,6 @@
 # app/monitor/collectors/fed.py
 import logging
+from datetime import datetime
 
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -9,6 +10,7 @@ from app.monitor.models import Dimension, MonitorEvent
 logger = logging.getLogger(__name__)
 
 # 列名映射集中常量——真实接口列名冒烟时只改这里
+_COL_DATE = "日期"
 _COL_TIME = "时间"
 _COL_EVENT = "事件"
 _COL_REGION = "地区"
@@ -20,7 +22,10 @@ class FedCollector(AkshareCollector):
     dimension = Dimension.FED
 
     def collect(self) -> list[MonitorEvent]:
-        df = self._fetch_or_none(self._ak.news_economic_baidu)
+        # date 默认硬编码 '20241107'，必须显式传当天
+        df = self._fetch_or_none(
+            self._ak.news_economic_baidu, date=datetime.now().strftime("%Y%m%d")
+        )
         if not isinstance(df, pd.DataFrame) or df.empty:
             return []
         events: list[MonitorEvent] = []
@@ -42,7 +47,9 @@ class FedCollector(AkshareCollector):
                         dimension=self.dimension,
                         title=text,
                         source="akshare:news_economic_baidu",
-                        published_at=self._parse_datetime(row.get(_COL_TIME)),
+                        published_at=self._parse_datetime(
+                            f"{row.get(_COL_DATE)} {row.get(_COL_TIME)}"
+                        ),
                     )
                 )
             except Exception as e:  # noqa: BLE001 单行坏数据只跳过该行

@@ -1,5 +1,6 @@
 # tests/unit/test_announcements_collector.py
-from datetime import datetime, timedelta
+import time
+from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -10,12 +11,15 @@ from app.monitor.models import Dimension
 
 
 def make_df(codes):
+    # 真实接口 stock_notice_report 列结构
     return pd.DataFrame(
         {
-            "公告日期": ["2026-10-29"] * len(codes),
+            "代码": codes,
+            "名称": ["贵州茅台"] * len(codes),
             "公告标题": ["关于回购股份的公告"] * len(codes),
-            "股票代码": codes,
             "公告类型": ["公司公告"] * len(codes),
+            "公告日期": ["2026-10-29"] * len(codes),
+            "网址": ["http://example.com/ann.pdf"] * len(codes),
         }
     )
 
@@ -42,6 +46,7 @@ def test_collects_events_for_holdings():
     assert events[0].title == "关于回购股份的公告"
     assert events[0].source == "akshare:stock_notice_report"
     assert events[0].published_at is not None
+    assert events[0].url  # url 非空——来自真实接口"网址"列
 
 
 def test_code_with_suffix_normalized():
@@ -65,10 +70,12 @@ def test_bad_row_skipped():
     ak = MagicMock()
     df = pd.DataFrame(
         {
-            "公告日期": ["2026-10-29", None],
+            "代码": ["600519", "600519"],
+            "名称": ["贵州茅台", "贵州茅台"],
             "公告标题": ["正常公告", None],
-            "股票代码": ["600519", "600519"],
             "公告类型": ["公司公告", "公司公告"],
+            "公告日期": ["2026-10-29", None],
+            "网址": ["http://example.com/a.pdf", None],
         }
     )
     ak.stock_notice_report.side_effect = df_only_today(df)
@@ -134,3 +141,42 @@ def test_single_day_failure_skipped_not_fatal():
     events = AnnouncementsCollector(holdings=holdings, ak=ak).collect()
     assert ak.stock_notice_report.call_count == 7
     assert len(events) == 6
+
+
+def test_fetch_window_timeout_returns_none_quickly():
+    # I2：_fetch_window 逐日调用走 _fetch_or_none 超时保护，慢接口不再拖死采集
+    def slow(*args, **kwargs):
+        time.sleep(2)
+        return make_df(["600519"])
+
+    ak = MagicMock()
+    ak.stock_notice_report.side_effect = slow
+    holdings = [Holding(code="600519")]
+    collector = AnnouncementsCollector(holdings=holdings, ak=ak, request_timeout=0.1)
+    start = time.monotonic()
+    events = collector.collect()
+    elapsed = time.monotonic() - start
+    assert events == []
+    # 7 天 × 0.1s 超时 + 开销，远小于无超时时的 7 × 2s
+    assert elapsed < 3.0
+
+
+def test_real_structure_url_column_present():
+    # 真实接口结构含"网址"列（date 对象公告日期），采集后 url 应取自该列
+    ak = MagicMock()
+    df = pd.DataFrame(
+        {
+            "代码": ["600519"],
+            "名称": ["贵州茅台"],
+            "公告标题": ["回购公告"],
+            "公告类型": ["公司公告"],
+            "公告日期": [date(2026, 10, 29)],
+            "网址": ["https://www.sse.com.cn/disclosure.pdf"],
+        }
+    )
+    ak.stock_notice_report.side_effect = df_only_today(df)
+    holdings = [Holding(code="600519")]
+    events = AnnouncementsCollector(holdings=holdings, ak=ak).collect()
+    assert len(events) == 1
+    assert events[0].url == "https://www.sse.com.cn/disclosure.pdf"
+    assert events[0].published_at is not None
