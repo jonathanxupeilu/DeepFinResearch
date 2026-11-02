@@ -60,11 +60,11 @@ def _show_library_card() -> None:
 def render() -> None:
     st.set_page_config(page_title="DeepFinResearch", page_icon="⚙️")
     st.title("⚙️ DeepFinResearch · 本地知识库问答")
-    _show_library_card()
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
+    # 先处理入库再渲染概览卡片：入库写入 Chroma 后，卡片的存量文章/切片数才能同步刷新
     with st.sidebar:
         st.header("📚 知识库管理")
         uploaded = st.file_uploader("上传文档", type=["md", "txt", "pdf", "docx"])
@@ -85,6 +85,8 @@ def render() -> None:
                     )
             except (ValueError, OSError, UnicodeDecodeError) as e:
                 st.error(f"入库失败: {e}")
+
+    _show_library_card()
 
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
