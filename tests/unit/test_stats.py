@@ -45,8 +45,16 @@ def test_build_stats_categories():
 
 def test_build_stats_latest_by_indexed_at():
     metas = [
-        {"source": "old.md", "chunk_index": 0, "indexed_at": "2026-10-01T08:00:00+00:00"},
-        {"source": "new.md", "chunk_index": 0, "indexed_at": "2026-10-30T09:00:00+00:00"},
+        {
+            "source": "old.md",
+            "chunk_index": 0,
+            "indexed_at": "2026-10-01T08:00:00+00:00",
+        },
+        {
+            "source": "new.md",
+            "chunk_index": 0,
+            "indexed_at": "2026-10-30T09:00:00+00:00",
+        },
     ]
     stats = build_library_stats(metas)
     assert stats.latest_title == "new"

@@ -16,6 +16,7 @@ _COL_EVENT = "事件"
 _COL_REGION = "地区"
 
 _KEYWORDS = ("FOMC", "美联储", "利率决议")
+_FED_REF_URL = "https://www.federalreserve.gov/"
 
 
 class FedCollector(AkshareCollector):
@@ -47,6 +48,7 @@ class FedCollector(AkshareCollector):
                         dimension=self.dimension,
                         title=text,
                         source="akshare:news_economic_baidu",
+                        url=_FED_REF_URL,
                         published_at=self._parse_datetime(
                             f"{row.get(_COL_DATE)} {row.get(_COL_TIME)}"
                         ),

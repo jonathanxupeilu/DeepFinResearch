@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 """临时探针：逐个 collector 真实采集，报告各维度产出。"""
+
 import logging
 import sys
 
@@ -30,7 +30,10 @@ def report(name, collector):
         print(f"[{name}] 采集异常: {exc!r}", flush=True)
 
 
-report("AnnouncementsCollector(600519)", AnnouncementsCollector([Holding(code="600519", name="贵州茅台")]))
+report(
+    "AnnouncementsCollector(600519)",
+    AnnouncementsCollector([Holding(code="600519", name="贵州茅台")]),
+)
 report("MacroCollector", MacroCollector())
 report("NewsCollector", NewsCollector())
 report("FedCollector", FedCollector())

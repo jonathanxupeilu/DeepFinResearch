@@ -61,7 +61,7 @@ def build_monitor_runner() -> MonitorRunner:
     store = EventStore(s.monitor_db_path)
     collectors: list[Collector] = [
         AnnouncementsCollector(holdings),
-        # 财联社接口在部分网络环境下持续挂起，单独收紧超时避免拖慢整体采集
+        # 新闻源网络不稳定（财联社曾持续挂起），单独收紧超时避免拖慢整体采集
         NewsCollector(request_timeout=20.0),
         MacroCollector(),
         FedCollector(),

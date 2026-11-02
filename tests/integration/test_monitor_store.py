@@ -116,9 +116,7 @@ def test_last_collect_roundtrip(tmp_path):
 
 def test_purge_before_removes_only_old(tmp_path):
     s = EventStore(tmp_path / "m.db")
-    old = make_event(
-        "旧事件", collected_at=datetime(2026, 9, 1, tzinfo=timezone.utc)
-    )
+    old = make_event("旧事件", collected_at=datetime(2026, 9, 1, tzinfo=timezone.utc))
     fresh = make_event("新事件")
     s.save_events([old, fresh])
     purged = s.purge_before(days=30)

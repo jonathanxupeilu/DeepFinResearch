@@ -8,6 +8,7 @@ from app.monitor.models import Dimension, MonitorEvent
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_CALENDAR = _PROJECT_ROOT / "config" / "policy_calendar.json"
+_GOV_REF_URL = "http://www.gov.cn/"
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class PolicyCollector:
                             title=f"临近：{name}（{item['date']}）",
                             content=f"重大会议：{name}，日期 {item['date']}。",
                             source="policy_calendar",
+                            url=_GOV_REF_URL,
                             published_at=date,
                         )
                     )

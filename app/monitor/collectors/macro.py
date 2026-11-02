@@ -14,19 +14,32 @@ class MacroCollector(AkshareCollector):
     dimension = Dimension.MACRO
 
     def collect(self, since: datetime | None = None) -> list[MonitorEvent]:
-        # (标题, 接口, 取数列, 接口名字符串)——source 用显式接口名，避免生产/Mock 下命名漂移
+        # (标题, 接口, 取数列, 接口名字符串, 参考链接)——source 用显式接口名，避免生产/Mock 下命名漂移
         indicators = [
-            ("PMI", self._ak.macro_china_pmi, "制造业-同比增长", "macro_china_pmi"),
-            ("CPI", self._ak.macro_china_cpi, "全国-同比增长", "macro_china_cpi"),
+            (
+                "PMI",
+                self._ak.macro_china_pmi,
+                "制造业-同比增长",
+                "macro_china_pmi",
+                "https://www.stats.gov.cn/",
+            ),
+            (
+                "CPI",
+                self._ak.macro_china_cpi,
+                "全国-同比增长",
+                "macro_china_cpi",
+                "https://www.stats.gov.cn/",
+            ),
             (
                 "社融增量",
                 self._ak.macro_china_shrzgm,
                 "社会融资规模增量",
                 "macro_china_shrzgm",
+                "http://www.pbc.gov.cn/",
             ),
         ]
         events: list[MonitorEvent] = []
-        for name, func, column, api_name in indicators:
+        for name, func, column, api_name, url in indicators:
             try:
                 df: pd.DataFrame = self._fetch_or_none(func)
                 if not isinstance(df, pd.DataFrame) or df.empty:
@@ -39,6 +52,7 @@ class MacroCollector(AkshareCollector):
                         title=name,
                         source=f"akshare:{api_name}",
                         content=content,
+                        url=url,
                         # 月份字符串解析暂不实现（YAGNI，既定决策）
                         published_at=None,
                     )

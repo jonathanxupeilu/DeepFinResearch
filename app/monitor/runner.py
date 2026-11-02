@@ -79,7 +79,7 @@ class MonitorRunner:
                 if on_report is not None:
                     try:
                         on_report(report)
-                    except Exception:  # noqa: BLE001 回调异常不影响采集结果
+                    except Exception:
                         logger.exception("on_report 回调失败")
 
         # 返回值始终按注入顺序，与完成先后无关

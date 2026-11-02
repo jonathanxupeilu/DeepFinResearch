@@ -12,7 +12,11 @@ from app.ui.pages import advisor, monitor
 
 st.navigation(
     {
-        "投研顾问": [st.Page(advisor.render, title="投研顾问", icon="💬", url_path="advisor")],
-        "市场监控": [st.Page(monitor.render, title="市场监控", icon="📊", url_path="monitor")],
+        "投研顾问": [
+            st.Page(advisor.render, title="投研顾问", icon="💬", url_path="advisor")
+        ],
+        "市场监控": [
+            st.Page(monitor.render, title="市场监控", icon="📊", url_path="monitor")
+        ],
     }
 ).run()

@@ -112,9 +112,7 @@ def test_run_all_passes_since_from_store():
     c2.dimension = Dimension.MACRO
     c2.collect = MagicMock(return_value=[])
     runner, store = make_runner([c1, c2])
-    store.get_last_collect.side_effect = (
-        lambda d: last if d == Dimension.NEWS else None
-    )
+    store.get_last_collect.side_effect = lambda d: last if d == Dimension.NEWS else None
     runner.run_all()
     c1.collect.assert_called_once_with(last)
     c2.collect.assert_called_once_with(None)

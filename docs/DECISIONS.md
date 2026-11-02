@@ -81,6 +81,20 @@
 
 # 变更记录（原 CHANGELOG.md 内容并入）
 
+## [Unreleased]（2026-11-02 · 市场监控：新闻源切换与全维度来源链接）
+
+### Changed
+- **每日要闻主源切换**：财联社 `stock_info_global_cls` 在部分网络下持续挂起
+  （20s 超时降级为空，致该维度恒为 0），主源改用东方财富 `stock_info_global_em`
+  （200 条、自带单条原文链接），空/失败降级新浪 `stock_info_global_sina`
+  （`app/monitor/collectors/news.py`）
+- **全维度事件附来源链接**：宏观→统计局/央行、美联储→fed 官网、行业→上金所/波罗的海
+  交易所、重大会议→政府网、要闻→单条原文/新浪首页；UI 链接文案统一为「来源链接」
+
+### Fixed
+- 既有门禁欠账清理：runner.py 无用 noqa、probe 脚本多余 utf-8 声明、6 个文件按
+  black 26.x 新规则重排（此前全量 `black --check .` 未跑过）
+
 ## [Unreleased]（2026-11-02 · 投研顾问页概览卡片同步修复）
 
 ### Fixed

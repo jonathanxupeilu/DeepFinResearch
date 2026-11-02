@@ -1,5 +1,6 @@
 # app/retrieval/stats.py
 """离线知识库存量统计：为 UI 概览卡片提供纯函数计算。"""
+
 from collections import Counter
 from datetime import datetime
 from pathlib import Path

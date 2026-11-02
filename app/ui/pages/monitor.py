@@ -125,7 +125,7 @@ def _show_events(dim: Dimension | None) -> None:
         with st.expander(f"{time_str}｜{e.dimension.value}｜{title}（{e.source}）"):
             st.markdown(e.content or "_无内容_")
             if e.url:
-                st.markdown(f"[原文链接]({e.url})")
+                st.markdown(f"[来源链接]({e.url})")
             if st.button(
                 "📥 入库知识库",
                 key=f"ingest-{e.dimension.value}-{e.collected_at.isoformat()}-{i}",

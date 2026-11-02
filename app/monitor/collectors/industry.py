@@ -20,7 +20,7 @@ class IndustryCollector(AkshareCollector):
     dimension = Dimension.INDUSTRY
 
     def collect(self, since: datetime | None = None) -> list[MonitorEvent]:
-        # (标题, 接口, 日期列, 数值列, 接口名字符串)
+        # (标题, 接口, 日期列, 数值列, 接口名字符串, 参考链接)
         indicators = [
             (
                 "黄金",
@@ -28,6 +28,7 @@ class IndustryCollector(AkshareCollector):
                 _SGE_DATE_COL,
                 _SGE_CLOSE_COL,
                 "spot_hist_sge",
+                "https://www.sge.com.cn/",
             ),
             (
                 "BDI运价",
@@ -35,10 +36,11 @@ class IndustryCollector(AkshareCollector):
                 _BDI_DATE_COL,
                 _BDI_CLOSE_COL,
                 "macro_shipping_bdi",
+                "https://www.balticexchange.com/",
             ),
         ]
         events: list[MonitorEvent] = []
-        for name, func, date_col, value_col, api_name in indicators:
+        for name, func, date_col, value_col, api_name, url in indicators:
             try:
                 df: pd.DataFrame = func()
                 if not isinstance(df, pd.DataFrame) or df.empty:
@@ -55,6 +57,7 @@ class IndustryCollector(AkshareCollector):
                         title=name,
                         source=f"akshare:{api_name}",
                         content=content,
+                        url=url,
                         published_at=self._parse_datetime(row[date_col]),
                     )
                 )
