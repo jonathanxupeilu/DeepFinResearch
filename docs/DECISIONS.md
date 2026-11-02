@@ -116,9 +116,33 @@ D012 的折线图上线后用户追加两点：指标应页面默认展示、「
 4. **Tavily 无 Key 静默降级**：`tavily_api_key` 默认空，factory 只在有 Key 时注册 web_search，Agent 能力随配置伸缩、不阻断启动。工具层异常一律降级为失败观察文本，循环不崩。
 5. **熔断**：`agent_max_iterations=5`，耗尽后最后一轮不给工具强制终答。
 
+## D015 · Agent 时间锚定与「先事实后原因」（2026-11-02）
+
+三期上线后用户实测：问「A股黄金板块最近波动为什么这么大」，回答泛泛而谈——无时间区间、未说明涨跌方向。根因是 LLM 无当前日期概念（「最近」解析不了）且提示词未要求先定位事实。决策：
+
+1. **动态日期注入**：系统提示词末尾运行时追加「今天是 YYYY-MM-DD（北京时间，星期X）」（UTC+8 计算，不依赖系统时区库）；AGENT_SYSTEM_PROMPT 保持静态常量，五期角色 prompt 自动获得时间锚点。
+2. **先事实后原因**：提示词规则——含时间词的问题第一轮必须先查证具体事实（区间/方向/幅度/关键事件）再分析原因；行情类回答先给事实概要。
+3. **搜索带时间**：联网 query 必须带明确时间词；web_search 暴露 Tavily `time_range`（day/week/month/year，非法值忽略，真实调用验证通过）。
+
+设计细节见三期设计文档 §11。
+
 ---
 
 # 变更记录（原 CHANGELOG.md 内容并入）
+
+## [Unreleased]（2026-11-02 · 三期修订：Agent 时间锚定与先事实后原因）
+
+### Changed
+- **系统提示词动态日期行**：`_system_message()` 追加「今天是 YYYY-MM-DD（北京时间，
+  星期X）」，「最近/近期」有了解析基准（`app/pipeline/agent.py`）
+- **AGENT_SYSTEM_PROMPT 规则 6→9 条**：时间词问题先查证事实（区间/方向/幅度）
+  再析因；联网 query 必带时间词；行情回答先事实概要（`app/pipeline/prompts.py`）
+- **web_search 暴露 time_range**：day/week/month/year 透传 Tavily，非法值忽略
+  （`app/tools/web_search.py`）
+
+### Added
+- 测试：系统消息日期行断言、time_range 透传/缺省/枚举 3 例（210 通过）；
+  Tavily time_range 真实调用验证
 
 ## [Unreleased]（2026-11-02 · 三期：工具调用 + ReAct 自主决策）
 

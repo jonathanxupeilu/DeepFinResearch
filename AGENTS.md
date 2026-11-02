@@ -54,14 +54,14 @@ cli.py / webapp.py → factory ─→ pipeline/agent.py（三期默认入口，R
 
 | 文件 | 职责 | 关键约束 |
 |---|---|---|
-| `app/pipeline/agent.py` | 三期 AgentPipeline：function calling ReAct 循环、全局证据编号 [n]、未知工具/失败容错、max_iterations 熔断后强制终答 | 与 rag.py 并列为 prompt 收口；五期多 Agent 在此注入角色 system_prompt |
+| `app/pipeline/agent.py` | 三期 AgentPipeline：function calling ReAct 循环、全局证据编号 [n]、未知工具/失败容错、max_iterations 熔断后强制终答；系统消息含动态日期行（时间锚定，D015） | 与 rag.py 并列为 prompt 收口；五期多 Agent 在此注入角色 system_prompt |
 | `app/pipeline/rag.py` | 检索→prompt→LLM→RagAnswer 带引用；空检索诚实拒答；闲聊分流 | 单轮快速通道（e2e 基线），Agent 入口已废除闲聊正则 |
 | `app/pipeline/prompts.py` | SYSTEM_PROMPT / AGENT_SYSTEM_PROMPT / USER_TEMPLATE / 拒答文案 / 闲聊正则 | 所有面向用户的文案常量放这里，不散落 |
 | `app/pipeline/citations.py` | 引用构建共享逻辑（按 [n] 标注过滤/越界忽略/无标注保留全部） | rag 与 agent 共用，改语义两处同时生效 |
 | `app/tools/base.py` | Tool Protocol + ToolSpec/ToolResult/Evidence（Pydantic） | 工具内部 catch 全部异常降级失败文本；Evidence 不编号，编号归循环层 |
 | `app/tools/registry.py` | ToolRegistry：注册（重名拒绝）/get/openai_tools() | 新工具 = 一个类 + factory 注册一行 |
 | `app/tools/knowledge_search.py` | 包装一期 Retriever 的知识库检索工具 | query 必填，检索空/异常均降级观察文本 |
-| `app/tools/web_search.py` | Tavily REST 联网搜索（httpx，Bearer 鉴权，15s 超时） | 空 Key 构造即拒绝；factory 只在有 Key 时注册 |
+| `app/tools/web_search.py` | Tavily REST 联网搜索（httpx，Bearer 鉴权，15s 超时，time_range 时间窗） | 空 Key 构造即拒绝；factory 只在有 Key 时注册 |
 | `app/retrieval/retriever.py` | top-k 检索 + cosine 相似度阈值过滤 | score = 1 - cosine_dist，collection 必须是 cosine 空间 |
 | `app/retrieval/store.py` | Chroma 封装（upsert/query/delete/按 source 管理/get_all_metadatas） | 创建集合须带 `metadata={"hnsw:space": "cosine"}` |
 | `app/retrieval/stats.py` | 离线仓库统计（纯函数）：文章数/分类/最新入库；分类=monitor前缀→市场监控>目录前缀>上传文档 | 只聚合不查库；缺 indexed_at 的旧数据兜底 |

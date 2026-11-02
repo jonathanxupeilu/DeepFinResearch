@@ -5,6 +5,7 @@
 """
 
 import json
+from datetime import datetime, timedelta, timezone
 
 from app.llm.client import ChatResponse, LLMClient, ToolCall
 from app.models import RagAnswer, TraceStep
@@ -31,7 +32,7 @@ class AgentPipeline:
 
     def answer(self, question: str) -> RagAnswer:
         messages: list[dict] = [
-            {"role": "system", "content": self.system_prompt},
+            self._system_message(),
             {"role": "user", "content": question},
         ]
         evidence: list[Evidence] = []
@@ -51,6 +52,16 @@ class AgentPipeline:
         # 熔断兜底：最后一轮不给工具，强制终答
         reply = self.llm.chat(messages, temperature=0.3)
         return self._final(reply, evidence, trace)
+
+    def _system_message(self) -> dict:
+        """系统提示词 + 动态日期行：LLM 无当前时间概念，"最近"须靠此锚定。"""
+        beijing = datetime.now(timezone.utc) + timedelta(hours=8)
+        weekdays = "一二三四五六日"
+        date_line = (
+            f"\n\n今天是 {beijing:%Y-%m-%d}（北京时间，星期{weekdays[beijing.weekday()]}）。"
+            "用户问题中的「最近/近期/今天」等时间词以此为基准解析。"
+        )
+        return {"role": "system", "content": self.system_prompt + date_line}
 
     def _run_tool(
         self,

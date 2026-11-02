@@ -23,8 +23,13 @@ _SPEC = ToolSpec(
         "properties": {
             "query": {
                 "type": "string",
-                "description": "搜索关键词（简体中文）",
-            }
+                "description": "搜索关键词（简体中文，时效性问题须带明确时间词）",
+            },
+            "time_range": {
+                "type": "string",
+                "enum": ["day", "week", "month", "year"],
+                "description": "限定结果时间范围；查近期行情/新闻时用 week 或 month",
+            },
         },
         "required": ["query"],
     },
@@ -47,10 +52,14 @@ class WebSearchTool:
         query = str(arguments.get("query", "")).strip()
         if not query:
             return ToolResult(text="调用失败: 缺少必填参数 query")
+        payload: dict[str, Any] = {"query": query, "max_results": self._max_results}
+        time_range = arguments.get("time_range")
+        if time_range in ("day", "week", "month", "year"):
+            payload["time_range"] = time_range
         try:
             resp = httpx.post(
                 _TAVILY_URL,
-                json={"query": query, "max_results": self._max_results},
+                json=payload,
                 headers={"Authorization": f"Bearer {self._api_key}"},
                 timeout=self._timeout,
             )

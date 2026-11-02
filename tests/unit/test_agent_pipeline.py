@@ -60,8 +60,11 @@ def test_direct_answer_no_tools():
     assert result.answer == "你好！我是投研助手"
     assert result.trace == []
     assert result.citations == []
-    # 首轮 messages：system(AGENT 提示词) + user(问题)
-    assert llm.rounds[0][0] == {"role": "system", "content": AGENT_SYSTEM_PROMPT}
+    # 首轮 messages：system(AGENT 提示词 + 动态日期行) + user(问题)
+    system = llm.rounds[0][0]
+    assert system["role"] == "system"
+    assert system["content"].startswith(AGENT_SYSTEM_PROMPT)
+    assert "今天是" in system["content"]  # 时间锚点：LLM 需知道当前日期才能解析"最近"
     assert llm.rounds[0][1]["content"] == "你好"
 
 

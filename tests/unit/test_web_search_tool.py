@@ -113,6 +113,24 @@ def test_run_missing_query_degrades(monkeypatch):
     assert "query" in result.text
 
 
+def test_run_passes_time_range_when_given(monkeypatch):
+    captured = patch_post(monkeypatch, FakeResponse(payload=RESPONSE_JSON))
+    WebSearchTool(api_key="k").run({"query": "黄金板块", "time_range": "week"})
+    assert captured["json"]["time_range"] == "week"
+
+
+def test_run_omits_time_range_when_absent(monkeypatch):
+    captured = patch_post(monkeypatch, FakeResponse(payload=RESPONSE_JSON))
+    WebSearchTool(api_key="k").run({"query": "黄金板块"})
+    assert "time_range" not in captured["json"]
+
+
+def test_spec_exposes_time_range():
+    props = WebSearchTool(api_key="k").spec.parameters["properties"]
+    assert "week" in props["time_range"]["enum"]
+    assert WebSearchTool(api_key="k").spec.parameters["required"] == ["query"]
+
+
 def test_run_malformed_result_items_skipped(monkeypatch):
     patch_post(
         monkeypatch,
