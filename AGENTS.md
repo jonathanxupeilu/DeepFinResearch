@@ -4,7 +4,7 @@
 
 ## 项目是什么
 
-本地知识库 RAG 投研问答助手，六期路线图演进为多 Agent 投研平台。当前状态：**一至三期已完成**（207 unit/integration 测试绿 + e2e 冒烟含真实 function calling 链路）。
+本地知识库 RAG 投研问答助手，六期路线图演进为多 Agent 投研平台。当前状态：**一至三期已完成**（224 unit/integration 测试绿 + e2e 冒烟含真实 function calling 链路）。
 
 ## 路线图（v2，六期）
 

@@ -180,3 +180,14 @@ tavily_max_results: int = 5
 ## 13. 踩坑与优化记录
 
 已迁移：自 D017 起，所有踩坑与优化 log 统一记录于 `docs/DECISIONS.md`（「踩坑记录」节），本文件不再维护此类内容。当日记录见 DECISIONS.md 踩坑记录 2026-11-02 条。
+
+## 14. 实施修订三（2026-11-02 · 多轮对话上下文）
+
+**优化前**：`answer(question)` 只收当前问题。实测追问「我补充三个思考维度（宏观/资金/基本面）」在无前情下送达 LLM，检索 query 退化为泛词，黄金板块的追问捞回晶圆/光伏/生猪等无关证据。
+
+**优化后**：
+1. `answer(question, history)`：system 与本轮问题之间注入历史 user/assistant 消息（最近 10 条 `_MAX_HISTORY_TURNS`、单条截断 1500 字 `_HISTORY_CONTENT_LIMIT`，防长对话挤占证据窗口）
+2. advisor 页传本轮之前的 `st.session_state.messages` 快照；cli 逐轮累积并传拷贝（防调用方列表被后续追加污染）
+3. 提示词新增规则 11：追问/补充维度必须结合原话题理解，检索 query 与回答不得丢失主题词
+
+**取舍**：历史只传问答终稿文本、不传工具调用明细，上下文简洁；条数与长度双上限控制 token 成本。
