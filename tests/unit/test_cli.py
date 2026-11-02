@@ -5,7 +5,7 @@ from pydantic import BaseModel, ValidationError
 
 from app import cli
 from app.cli import format_answer, run
-from app.models import Citation, RagAnswer
+from app.models import Citation, RagAnswer, TraceStep
 
 
 def _validation_error() -> ValidationError:
@@ -38,6 +38,26 @@ def test_format_answer_with_citations():
 
 def test_format_answer_no_citations():
     assert format_answer(RagAnswer(answer="纯回复")) == "纯回复"
+
+
+def test_format_answer_with_trace():
+    result = RagAnswer(
+        answer="终答 [1]",
+        citations=[Citation(marker=1, source="a.md", text="片段")],
+        trace=[
+            TraceStep(
+                step=1,
+                tool="knowledge_search",
+                arguments={"query": "护城河"},
+                observation="2 条证据",
+            )
+        ],
+    )
+    text = format_answer(result)
+    assert "决策轨迹" in text
+    assert "knowledge_search" in text
+    assert "护城河" in text
+    assert "2 条证据" in text
 
 
 def test_run_repl_loop():
@@ -87,7 +107,7 @@ def test_main_friendly_error_on_missing_api_key(monkeypatch, capsys):
     def _boom():
         raise _validation_error()
 
-    monkeypatch.setattr(cli, "build_pipeline", _boom)
+    monkeypatch.setattr(cli, "build_agent_pipeline", _boom)
     rc = cli.main()
     assert rc == 1
     captured = capsys.readouterr()

@@ -9,20 +9,22 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 import streamlit as st
 
 from app.config import get_settings
-from app.factory import build_ingest_components, build_pipeline
+from app.factory import build_agent_pipeline, build_ingest_components
 from app.ingest.loaders import load_file
 from app.models import Document, RagAnswer
 from app.retrieval.stats import build_library_stats
 from app.retrieval.store import VectorStore
 
+_TOOL_LABELS = {"knowledge_search": "📚 知识库检索", "web_search": "🌐 联网搜索"}
+
 
 @st.cache_resource
 def get_pipeline():
-    """会话间复用 pipeline（Chroma 连接/Embedder/LLM 客户端）。
+    """会话间复用 AgentPipeline（Chroma 连接/Embedder/LLM 客户端/工具注册表）。
 
     放在 UI 层而非 factory：factory 还服务 CLI 与测试，须保持框架无关。
     """
-    return build_pipeline()
+    return build_agent_pipeline()
 
 
 @st.cache_resource
@@ -98,7 +100,7 @@ def render() -> None:
             st.markdown(question)
 
         with st.chat_message("assistant"):
-            with st.spinner("检索知识库并生成回答…"):
+            with st.spinner("思考并查证中…"):
                 result: RagAnswer | None
                 try:
                     result = get_pipeline().answer(question)
@@ -108,11 +110,24 @@ def render() -> None:
                 st.error("生成回答失败，请稍后重试")
             else:
                 st.markdown(result.answer)
+                if result.trace:
+                    with st.expander("🧠 决策轨迹"):
+                        for t in result.trace:
+                            label = _TOOL_LABELS.get(t.tool, t.tool)
+                            st.markdown(
+                                f"**第 {t.step} 轮 · {label}** `{t.arguments}`\n\n"
+                                f"> {t.observation[:200]}"
+                            )
                 if result.citations:
                     with st.expander("📎 引用来源"):
                         for c in result.citations:
+                            source = (
+                                f"[{c.source}]({c.source})"
+                                if c.source.startswith(("http://", "https://"))
+                                else c.source
+                            )
                             st.markdown(
-                                f"**[{c.marker}] {c.source}**\n\n> {c.text[:200]}…"
+                                f"**[{c.marker}] {source}**\n\n> {c.text[:200]}…"
                             )
                 st.session_state.messages.append(
                     {"role": "assistant", "content": result.answer}

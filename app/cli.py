@@ -5,7 +5,7 @@ import sys
 
 from pydantic import ValidationError
 
-from app.factory import build_pipeline
+from app.factory import build_agent_pipeline
 from app.models import RagAnswer
 
 EXIT_WORDS = {"/exit", "/quit", "exit", "quit", "q"}
@@ -13,6 +13,13 @@ EXIT_WORDS = {"/exit", "/quit", "exit", "quit", "q"}
 
 def format_answer(result: RagAnswer) -> str:
     lines = [result.answer]
+    if result.trace:
+        lines.append("")
+        lines.append("🧠 决策轨迹:")
+        lines.extend(
+            f"  {t.step}. {t.tool} {t.arguments} → {t.observation}"
+            for t in result.trace
+        )
     if result.citations:
         lines.append("")
         lines.append("📎 引用来源:")
@@ -47,7 +54,7 @@ def run(pipeline, input_fn=input, output=print) -> None:
 
 def main() -> int:
     try:
-        pipeline = build_pipeline()
+        pipeline = build_agent_pipeline()
     except ValidationError:
         print(
             "缺少必需的 API Key，请复制 .env.example 为 .env 并填入 "
