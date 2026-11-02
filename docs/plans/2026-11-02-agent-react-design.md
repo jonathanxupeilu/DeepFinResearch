@@ -162,3 +162,17 @@ tavily_max_results: int = 5
 3. **web_search 暴露 time_range**：可选参数 day/week/month/year 透传 Tavily（真实调用验证通过），非法值忽略
 
 **最新设计**：AGENT_SYSTEM_PROMPT 保持静态常量（规则），日期行运行时拼接——五期注入角色 prompt 时同样自动获得时间锚点。
+
+## 12. 实施修订二（2026-11-02 · 时间获取工具化，D016）
+
+**优化前**（§11 方案）：系统消息运行时写死追加「今天是 YYYY-MM-DD」日期行。
+
+**用户反馈**：应让 Agent 自主判断是否调用「获取当前时间」工具，而不是写死时间。
+
+**优化后**：
+1. 新增 `app/tools/current_time.py`：无参数工具，返回「当前北京时间：YYYY-MM-DD HH:MM（星期X）」；注入时钟语义 = 返回 UTC，+8 换算归工具（测试用固定时钟验证）
+2. `agent.py` 撤销 `_system_message()` 动态日期行，系统消息回到静态 AGENT_SYSTEM_PROMPT
+3. 提示词规则 3：明确「你没有当前时间的概念」，时间词问题必须先调 current_time；规则 5 的时间词以 current_time 结果为准
+4. factory 无条件注册 current_time（无 Key 也具备：knowledge_search + current_time）；advisor 页工具标签「🕐 当前时间」
+
+**取舍**：多一轮工具调用（时间敏感问题）换取架构一致性——工具能力全部经注册表声明、由 LLM 自主决策，系统提示词保持静态常量，五期角色 prompt 复用无副作用。

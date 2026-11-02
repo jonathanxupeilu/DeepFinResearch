@@ -22,6 +22,7 @@ from app.pipeline.agent import AgentPipeline
 from app.pipeline.rag import RAGPipeline
 from app.retrieval.retriever import Retriever
 from app.retrieval.store import VectorStore
+from app.tools.current_time import CurrentTimeTool
 from app.tools.knowledge_search import KnowledgeSearchTool
 from app.tools.registry import ToolRegistry
 from app.tools.web_search import WebSearchTool
@@ -51,6 +52,7 @@ def build_agent_pipeline() -> AgentPipeline:
     llm = DeepSeekClient(s.deepseek_api_key, s.deepseek_base_url, s.deepseek_model)
     registry = ToolRegistry()
     registry.register(KnowledgeSearchTool(retriever))
+    registry.register(CurrentTimeTool())
     if s.tavily_api_key.strip():
         registry.register(
             WebSearchTool(s.tavily_api_key, max_results=s.tavily_max_results)

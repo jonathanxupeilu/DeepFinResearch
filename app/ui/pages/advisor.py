@@ -15,7 +15,11 @@ from app.models import Document, RagAnswer
 from app.retrieval.stats import build_library_stats
 from app.retrieval.store import VectorStore
 
-_TOOL_LABELS = {"knowledge_search": "📚 知识库检索", "web_search": "🌐 联网搜索"}
+_TOOL_LABELS = {
+    "knowledge_search": "📚 知识库检索",
+    "web_search": "🌐 联网搜索",
+    "current_time": "🕐 当前时间",
+}
 
 
 @st.cache_resource

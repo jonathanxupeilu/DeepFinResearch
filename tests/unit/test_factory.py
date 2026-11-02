@@ -42,13 +42,13 @@ def test_build_monitor_runner(env, monkeypatch, tmp_path):
 
 
 def test_build_agent_pipeline_without_tavily(env, monkeypatch):
-    monkeypatch.setenv("TAVILY_API_KEY", "")  # 无 Key → 只注册 knowledge_search
+    monkeypatch.setenv("TAVILY_API_KEY", "")  # 无 Key → 不注册 web_search
     from app.factory import build_agent_pipeline
     from app.pipeline.agent import AgentPipeline
 
     agent = build_agent_pipeline()
     assert isinstance(agent, AgentPipeline)
-    assert agent.registry.names() == ["knowledge_search"]
+    assert set(agent.registry.names()) == {"knowledge_search", "current_time"}
     assert agent.max_iterations == 5
 
 
@@ -57,4 +57,8 @@ def test_build_agent_pipeline_with_tavily(env, monkeypatch):
     from app.factory import build_agent_pipeline
 
     agent = build_agent_pipeline()
-    assert set(agent.registry.names()) == {"knowledge_search", "web_search"}
+    assert set(agent.registry.names()) == {
+        "knowledge_search",
+        "current_time",
+        "web_search",
+    }
