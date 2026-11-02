@@ -4,7 +4,7 @@
 from streamlit.testing.v1 import AppTest
 
 SCRIPT = """
-from app.ui.pages import advisor
+from app.ui.views import advisor
 from app.models import Citation, RagAnswer, TraceStep
 
 
