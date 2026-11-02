@@ -6,7 +6,6 @@
 - Evidence 不编号，全局 [n] 编号由 AgentPipeline 循环层统一分配
 """
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
@@ -36,4 +35,5 @@ class ToolResult:
 @runtime_checkable
 class Tool(Protocol):
     spec: ToolSpec
-    run: Callable[[dict[str, Any]], ToolResult]
+
+    def run(self, arguments: dict[str, Any]) -> ToolResult: ...
