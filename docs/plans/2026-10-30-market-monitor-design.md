@@ -36,7 +36,7 @@ config/holdings.json        持仓股列表（手工编辑，UI 只读展示）
         store.py  SQLite(data/monitor.db)
                   events 表：内容 hash 去重，按维度/时间索引
                   collect_state 表：每维度采集水位线（增量依据）
-                  purge_before()：超 30 天旧事件自动清理
+                  purge_before()：超 30 天旧事件自动清理（指标序列豁免）
                                 │
         面板展示 ←──────────────┘
         （可选按钮：事件文本入库知识库，复用一期 indexer）
@@ -88,8 +88,8 @@ CREATE INDEX IF NOT EXISTS idx_events_dim_time ON events(dimension, published_at
 
 - **去重**：hash 冲突静默跳过（added 计数区分新增/跳过）
 - **水位线**（D010 增）：`collect_state` 表记每维度上次成功采集时间；`get_last_collect/set_last_collect`；采集成功的维度才推进，失败维度下次重采
-- **过时清理**（D010 增）：`purge_before(days) -> int` 删除 `collected_at` 早于 now-days 的事件，采集完成后 UI 自动调用（默认 30 天）并显示清理条数
-- 接口：`save_events(events) -> (added, skipped)`、`list_events(dimension, limit)`、`counts_by_dimension()`、`get_last_collect/set_last_collect`、`purge_before`
+- **过时清理**（D010 增）：`purge_before(days, exclude=()) -> int` 删除 `collected_at` 早于 now-days 的事件，采集完成后 UI 自动调用（默认 30 天）并显示清理条数；`exclude` 豁免的维度（宏观/行业指标序列）不参与清理，保证折线图历史不丢
+- 接口：`save_events(events) -> (added, skipped)`、`list_events(dimension, limit)`、`counts_by_dimension()`、`get_last_collect/set_last_collect`、`purge_before`、`purge_empty_url`
 - 真实 SQLite + tmp_path 做 integration 测试
 
 ## 5. 采集器设计（`app/monitor/collectors/`）
@@ -101,17 +101,18 @@ class Collector(Protocol):
     dimension: Dimension
     def collect(self, since: datetime | None = None) -> list[MonitorEvent]: ...
 # since = 该维度上次成功采集水位线（runner 从 store 读取后传入）；
-# 公告采集器用它收缩回补窗口，其余采集器透传忽略。首次采集传 None。
+# 公告采集器用它收缩回补窗口；宏观/行业用它做增量（只采 since-90天 回看窗口，
+# 首次 None 全量近 10 年）；其余采集器透传忽略。首次采集传 None。
 ```
 
 | Collector | akshare 接口（实施时验证可用性） | 备注 |
 |---|---|---|
 | announcements | `ak.stock_notice_report`（巨潮公告） | 只采 holdings.json 中的代码 |
 | news | `ak.stock_info_global_em` 主源 + `ak.stock_info_global_sina` fallback | 东财带单条原文链接；财联社 cls 本机网络持续挂起已弃用（§11-6） |
-| macro | `ak.macro_china_pmi` / `macro_china_cpi` 等 | 每指标一条事件，数值入 content |
-| fed | `ak.news_economic_baidu`（财经日历）或 FOMC 静态表 | 接口不稳定则降级静态日历 |
+| macro | `ak.macro_china_pmi` / `macro_china_cpi` / `macro_china_shrzgm` | 近 10 年逐期序列事件（value 数值 + 月初 published_at），since 增量回看 90 天 |
+| fed | `ak.news_economic_baidu`（财经日历）或 FOMC 静态表 | 正文含公布/预期/前值/重要性，附美联储官网链接 |
 | policy | **静态日历** `config/policy_calendar.json`（2026 已知会议日期） | 采集时比对"临近会议"生成提醒事件 |
-| industry | 金价 `ak.spot_hist_sge`、运价 BDI 等 | 首批 2-3 个指标即可，可扩展 |
+| industry | 金价 `ak.spot_hist_sge`、运价 BDI `macro_shipping_bdi` | 近 10 年逐日序列事件（value + 日期），since 增量回看 90 天 |
 
 **容错约定**：每个 collector 内部 catch 全部异常并返回空列表 + 记录；`runner.run_all()` 汇总为 `CollectReport` 列表，面板显示每个维度采集状态（成功 N 条 / 失败原因）。
 
