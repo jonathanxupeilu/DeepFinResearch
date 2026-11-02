@@ -42,6 +42,16 @@ class Citation(BaseModel):
     text: str
 
 
+class TraceStep(BaseModel):
+    """Agent 决策轨迹单步：第几轮调了什么工具、参数与观察摘要。"""
+
+    step: int
+    tool: str
+    arguments: dict = Field(default_factory=dict)
+    observation: str = ""
+
+
 class RagAnswer(BaseModel):
     answer: str
     citations: list[Citation] = Field(default_factory=list)
+    trace: list[TraceStep] = Field(default_factory=list)

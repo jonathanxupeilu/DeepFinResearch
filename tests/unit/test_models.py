@@ -2,7 +2,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models import Chunk, Citation, Document, RagAnswer, RetrievedChunk
+from app.models import Chunk, Citation, Document, RagAnswer, RetrievedChunk, TraceStep
 
 
 def test_chunk_creation():
@@ -35,3 +35,24 @@ def test_document_auto_doc_id():
 def test_rag_answer_default_citations():
     a = RagAnswer(answer="回复")
     assert a.citations == []
+
+
+def test_trace_step_fields():
+    t = TraceStep(
+        step=1,
+        tool="knowledge_search",
+        arguments={"query": "护城河"},
+        observation="命中 3 条证据",
+    )
+    assert t.step == 1
+    assert t.arguments["query"] == "护城河"
+
+
+def test_rag_answer_default_trace_and_compat():
+    a = RagAnswer(answer="回复")
+    assert a.trace == []
+    b = RagAnswer(
+        answer="回复",
+        trace=[TraceStep(step=1, tool="web_search", arguments={}, observation="ok")],
+    )
+    assert len(b.trace) == 1
