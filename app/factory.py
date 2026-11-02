@@ -18,9 +18,13 @@ from app.monitor.collectors.base import Collector
 from app.monitor.holdings import Holding, load_holdings
 from app.monitor.runner import MonitorRunner
 from app.monitor.store import EventStore
+from app.pipeline.agent import AgentPipeline
 from app.pipeline.rag import RAGPipeline
 from app.retrieval.retriever import Retriever
 from app.retrieval.store import VectorStore
+from app.tools.knowledge_search import KnowledgeSearchTool
+from app.tools.registry import ToolRegistry
+from app.tools.web_search import WebSearchTool
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,24 @@ def build_pipeline() -> RAGPipeline:
     retriever = Retriever(store, embedder, s.top_k, s.score_threshold)
     llm = DeepSeekClient(s.deepseek_api_key, s.deepseek_base_url, s.deepseek_model)
     return RAGPipeline(retriever, llm)
+
+
+def build_agent_pipeline() -> AgentPipeline:
+    """三期 Agent 入口：工具注册表按配置伸缩（Tavily 无 Key 时静默降级）。"""
+    s = get_settings()
+    store = VectorStore(persist_dir=s.chroma_dir)
+    embedder = DashScopeEmbedder(
+        s.dashscope_api_key, s.dashscope_base_url, s.embedding_model
+    )
+    retriever = Retriever(store, embedder, s.top_k, s.score_threshold)
+    llm = DeepSeekClient(s.deepseek_api_key, s.deepseek_base_url, s.deepseek_model)
+    registry = ToolRegistry()
+    registry.register(KnowledgeSearchTool(retriever))
+    if s.tavily_api_key.strip():
+        registry.register(
+            WebSearchTool(s.tavily_api_key, max_results=s.tavily_max_results)
+        )
+    return AgentPipeline(registry, llm, max_iterations=s.agent_max_iterations)
 
 
 def build_ingest_components() -> Indexer:
