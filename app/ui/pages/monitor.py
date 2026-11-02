@@ -56,9 +56,12 @@ def _show_metrics() -> None:
 
 
 def _show_series_charts() -> None:
-    """指标趋势折线图：宏观/行业近 N 年序列默认展示在主页，期间可选。"""
-    st.subheader("📈 指标趋势")
-    period = st.selectbox("历史期间", list(_PERIODS), index=0)
+    """指标趋势折线图：宏观/行业序列默认展示在主页，期间可选，双列排版。"""
+    head_col, period_col = st.columns([4, 1])
+    with head_col:
+        st.subheader("📈 指标趋势")
+    with period_col:
+        period = st.selectbox("历史期间", list(_PERIODS), index=0)
     cutoff = datetime.now(timezone.utc) - timedelta(days=_PERIODS[period])
     try:
         with build_monitor_store() as store:
@@ -74,16 +77,21 @@ def _show_series_charts() -> None:
             continue
         series.setdefault(e.title, []).append((e.published_at, e.value))
     if not series:
-        st.info("暂无指标数据，点击上方「🔄 立即采集」获取")
+        st.info("暂无指标数据，点击下方「🔄 立即采集」获取")
         return
-    for title, points in sorted(series.items()):
+    cols = st.columns(2)
+    for i, (title, points) in enumerate(sorted(series.items())):
         df = (
             pd.DataFrame(sorted(points, key=lambda p: p[0]), columns=["date", "value"])
             .groupby("date")
             .last()
         )
-        st.markdown(f"**{title}**")
-        st.line_chart(df["value"])
+        with cols[i % 2]:
+            st.markdown(
+                f"**{title}** · 最新 {df['value'].iloc[-1]:,.2f}"
+                f"（{df.index[-1]:%Y-%m-%d}）"
+            )
+            st.line_chart(df["value"])
 
 
 def _collect_now() -> None:
@@ -103,8 +111,10 @@ def _collect_now() -> None:
                         status.write(f"❌ {r.dimension.value}：{r.error}")
 
                 runner.run_all(on_report=_on_report)
-                # 存量过时自动清理
-                purged = runner.store.purge_before(_RETENTION_DAYS)
+                # 存量过时自动清理（指标类序列长期保留，不参与 30 天清理）
+                purged = runner.store.purge_before(
+                    _RETENTION_DAYS, exclude=_SERIES_DIMS
+                )
                 # 来源链接上线前的无链接旧版本清理（消除同名重复）
                 deduped = runner.store.purge_empty_url()
             finally:
@@ -186,8 +196,8 @@ def render() -> None:
     st.title("📊 市场监控")
 
     _show_holdings_hint()
+    _show_series_charts()  # 指标趋势默认展示，采集只做增量更新
     _show_metrics()
-    _show_series_charts()
 
     st.button("🔄 立即采集", on_click=_collect_now)
     _show_reports()

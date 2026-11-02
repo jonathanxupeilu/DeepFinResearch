@@ -192,3 +192,8 @@ UI 不做自动化测试（Streamlit 特性），语法校验 + 手动冒烟。
    - **思路**：指标类本质是时间序列，事件列表不适合 → 移出维度筛选，改主页折线图 + 历史期间（1/3/5/10 年）；采集器改存近 10 年多期事件（`MonitorEvent.value` 结构化数值 + `published_at` 时间轴），复用 events 表 + content_hash 去重，不新建序列表（最小改动）；重复用 `purge_empty_url()` 清理无链接旧版本（不改 hash 算法，避免存量 hash 全失效）；美联储正文组合接口公布/预期/前值/重要性列。
    - **优化后**：主页默认 5 条指标折线（PMI/CPI/社融/黄金/BDI）带期间切换；维度筛选与计数卡片只留事件类四维；存量重复采集后自动清理；美联储事件有正文与来源链接。
    - **最新设计**：`MonitorEvent.value: float|None`（指标数值，事件类为 None）；events 表加 `value REAL` 列（存量库 `ALTER TABLE` 迁移）；macro/industry 存近 10 年序列（`_MAX_HISTORY_YEARS=10` 控膨胀）；macro 中文年月"2026年09月份"自定义解析 `_parse_month`；UI `_show_series_charts()` 按 title 分组画 `st.line_chart`，期间 selectbox 过滤 `published_at >= now - period`。
+8. **指标排版优化 + 采集增量化**（2026-11-02）：
+   - **优化前**：折线图单列全宽堆叠、期间选择器独占一行；宏观/行业每次「立即采集」都重拉近 10 年全量；`purge_before` 30 天过时清理会把旧序列点删掉（collected_at 老化），折线图历史随时间丢失。
+   - **思路**：指标趋势区上移至页面顶部（默认展示，无需先采集）；排版改双列网格，期间选择器与标题同行，每图带「最新值（日期）」标注；采集器尊重 `since` 水位线做增量——只保留 `since - 90 天` 回看窗口内的数据点（覆盖月度发布滞后/修订，重叠由 content_hash 去重），首次仍全量 10 年；指标类维度退出 30 天清理（`purge_before(exclude=...)`），序列长期保留。
+   - **优化后**：进页面即见 5 图双列趋势 + 最新值；「立即采集」对指标只入库新数据点，速度稳定；历史序列不再被过时清理误删。
+   - **最新设计**：`MacroCollector`/`IndustryCollector` 的 `collect(since)` 生效（`_SINCE_LOOKBACK_DAYS=90`，cutoff = max(10年前, since-90天)）；`EventStore.purge_before(days, exclude)` 支持维度豁免；industry 改走 `_fetch_or_none`（超时保护对齐基类）；UI `_show_series_charts()` 双列 `st.columns(2)` 布局。

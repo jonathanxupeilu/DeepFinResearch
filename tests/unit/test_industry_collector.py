@@ -1,4 +1,5 @@
 # tests/unit/test_industry_collector.py
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -99,3 +100,17 @@ def test_industry_old_period_filtered_out():
     )
     ak.macro_shipping_bdi.return_value = pd.DataFrame({"日期": [], "最新值": []})
     assert IndustryCollector(ak=ak).collect() == []
+
+
+def test_industry_incremental_since_filters_old_rows():
+    # 增量：since 水位线存在时只保留回看窗口内的数据点，旧点不重复产出
+    now = datetime.now(timezone.utc)
+    recent = (now - timedelta(days=10)).strftime("%Y-%m-%d")
+    ak = MagicMock()
+    ak.spot_hist_sge.return_value = pd.DataFrame(
+        {"date": [recent, "2020-01-02"], "close": [780.5, 350.0]}
+    )
+    ak.macro_shipping_bdi.return_value = pd.DataFrame({"日期": [], "最新值": []})
+    events = IndustryCollector(ak=ak).collect(since=now - timedelta(days=1))
+    assert len(events) == 1
+    assert events[0].value == 780.5

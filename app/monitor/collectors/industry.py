@@ -16,6 +16,8 @@ _BDI_DATE_COL = "日期"
 _BDI_CLOSE_COL = "最新值"
 # 折线图最大期间为 10 年，只存近 10 年序列，控制 events 表膨胀
 _MAX_HISTORY_YEARS = 10
+# 增量采集回看天数：覆盖数据源补发/修订，重叠部分由 content_hash 去重
+_SINCE_LOOKBACK_DAYS = 90
 
 
 class IndustryCollector(AkshareCollector):
@@ -42,10 +44,14 @@ class IndustryCollector(AkshareCollector):
             ),
         ]
         cutoff = datetime.now(timezone.utc) - timedelta(days=365 * _MAX_HISTORY_YEARS)
+        if since is not None:
+            # 增量更新：只采水位线回看 90 天内的新数据，首次（since=None）仍拉近 10 年全量
+            incremental = since - timedelta(days=_SINCE_LOOKBACK_DAYS)
+            cutoff = max(cutoff, incremental)
         events: list[MonitorEvent] = []
         for name, func, date_col, value_col, api_name, url in indicators:
             try:
-                df: pd.DataFrame = func()
+                df: pd.DataFrame = self._fetch_or_none(func)
                 if not isinstance(df, pd.DataFrame) or df.empty:
                     raise ValueError("返回数据非 DataFrame 或为空")
                 # 近 10 年逐期存事件（折线图时间序列）；content_hash 去重保证重复采集不膨胀

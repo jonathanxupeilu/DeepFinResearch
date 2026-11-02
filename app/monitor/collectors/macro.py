@@ -15,6 +15,8 @@ _MONTH_RE = re.compile(r"(\d{4})\D+(\d{1,2})")
 _COMPACT_MONTH_RE = re.compile(r"^(\d{4})(\d{1,2})$")
 # 折线图最大期间为 10 年，只存近 10 年序列，控制 events 表膨胀
 _MAX_HISTORY_YEARS = 10
+# 增量采集回看天数：月度数据发布滞后约 1-2 个月，回看 90 天覆盖补发/修订
+_SINCE_LOOKBACK_DAYS = 90
 
 
 def _parse_month(value: Any) -> datetime | None:
@@ -58,6 +60,10 @@ class MacroCollector(AkshareCollector):
             ),
         ]
         cutoff = datetime.now(timezone.utc) - timedelta(days=365 * _MAX_HISTORY_YEARS)
+        if since is not None:
+            # 增量更新：只采水位线回看 90 天内的新数据，首次（since=None）仍拉近 10 年全量
+            incremental = since - timedelta(days=_SINCE_LOOKBACK_DAYS)
+            cutoff = max(cutoff, incremental)
         events: list[MonitorEvent] = []
         for name, func, column, api_name, url in indicators:
             try:

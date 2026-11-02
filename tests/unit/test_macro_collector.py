@@ -1,4 +1,5 @@
 # tests/unit/test_macro_collector.py
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -103,3 +104,23 @@ def test_macro_old_period_filtered_out():
         {"月份": [], "社会融资规模增量": []}
     )
     assert MacroCollector(ak=ak).collect() == []
+
+
+def test_macro_incremental_since_filters_old_rows():
+    # 增量：since 水位线存在时只保留 since-90天 回看窗口内的期，旧期不重复产出
+    now = datetime.now(timezone.utc)
+    recent = now - timedelta(days=30)
+    ak = MagicMock()
+    ak.macro_china_cpi.return_value = pd.DataFrame(
+        {
+            "月份": [recent.strftime("%Y年%m月份"), "2020年1月份"],
+            "全国-同比增长": [0.4, 1.5],
+        }
+    )
+    ak.macro_china_pmi.return_value = pd.DataFrame({"月份": [], "制造业-同比增长": []})
+    ak.macro_china_shrzgm.return_value = pd.DataFrame(
+        {"月份": [], "社会融资规模增量": []}
+    )
+    events = MacroCollector(ak=ak).collect(since=now - timedelta(days=1))
+    assert len(events) == 1
+    assert events[0].value == 0.4

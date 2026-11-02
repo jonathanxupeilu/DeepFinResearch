@@ -153,3 +153,19 @@ def test_purge_before_keeps_everything_when_none_old(tmp_path):
     s.save_events([make_event("a"), make_event("b")])
     assert s.purge_before(days=30) == 0
     assert s.count() == 2
+
+
+def test_purge_before_exclude_keeps_series_dims(tmp_path):
+    # 指标类序列长期保留画折线图，exclude 的维度不参与 30 天过时清理
+    s = EventStore(tmp_path / "m.db")
+    old = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    s.save_events(
+        [
+            make_event("旧事件", collected_at=old),
+            make_event("旧CPI", dim=Dimension.MACRO, collected_at=old),
+        ]
+    )
+    purged = s.purge_before(days=30, exclude=[Dimension.MACRO, Dimension.INDUSTRY])
+    assert purged == 1
+    assert s.count() == 1
+    assert s.list_events()[0].title == "旧CPI"

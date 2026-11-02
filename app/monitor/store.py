@@ -1,5 +1,6 @@
 # app/monitor/store.py
 import sqlite3
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -144,12 +145,27 @@ class EventStore:
         )
         self._conn.commit()
 
-    def purge_before(self, days: int, now: datetime | None = None) -> int:
-        """删除 collected_at 早于 now-days 的事件，返回删除条数（存量过时自动清理）。"""
+    def purge_before(
+        self,
+        days: int,
+        now: datetime | None = None,
+        exclude: Sequence[Dimension] = (),
+    ) -> int:
+        """删除 collected_at 早于 now-days 的事件，返回删除条数（存量过时自动清理）。
+
+        exclude 中的维度不清理——指标类序列需长期保留画折线图。
+        """
         cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=days)
-        cur = self._conn.execute(
-            "DELETE FROM events WHERE collected_at < ?", (cutoff.isoformat(),)
-        )
+        if exclude:
+            marks = ",".join("?" for _ in exclude)
+            cur = self._conn.execute(
+                f"DELETE FROM events WHERE collected_at < ? AND dimension NOT IN ({marks})",
+                [cutoff.isoformat(), *(d.value for d in exclude)],
+            )
+        else:
+            cur = self._conn.execute(
+                "DELETE FROM events WHERE collected_at < ?", (cutoff.isoformat(),)
+            )
         self._conn.commit()
         return cur.rowcount
 
