@@ -26,7 +26,7 @@ config/holdings.json        持仓股列表（手工编辑，UI 只读展示）
                                 ▼
         collectors/（统一 Collector 接口，按数据源插件化）
         ├─ announcements.py   持仓公告（akshare 巨潮公告接口，增量窗口回补）
-        ├─ news.py            每日要闻（akshare 财联社，独立 20s 超时）
+        ├─ news.py            每日要闻（东财主源+新浪 fallback，独立 20s 超时）
         ├─ macro.py           宏观指标（akshare：PMI/CPI/社融…）
         ├─ fed.py             美联储资产负债表等（akshare）
         ├─ policy.py          重大会议（静态日历文件 + 采集时比对）
@@ -107,7 +107,7 @@ class Collector(Protocol):
 | Collector | akshare 接口（实施时验证可用性） | 备注 |
 |---|---|---|
 | announcements | `ak.stock_notice_report`（巨潮公告） | 只采 holdings.json 中的代码 |
-| news | `ak.stock_info_global_cls`/`ak.stock_info_global_em` | 财联社+东财要闻，取其一或合并 |
+| news | `ak.stock_info_global_em` 主源 + `ak.stock_info_global_sina` fallback | 东财带单条原文链接；财联社 cls 本机网络持续挂起已弃用（§11-6） |
 | macro | `ak.macro_china_pmi` / `macro_china_cpi` 等 | 每指标一条事件，数值入 content |
 | fed | `ak.news_economic_baidu`（财经日历）或 FOMC 静态表 | 接口不稳定则降级静态日历 |
 | policy | **静态日历** `config/policy_calendar.json`（2026 已知会议日期） | 采集时比对"临近会议"生成提醒事件 |
@@ -117,9 +117,20 @@ class Collector(Protocol):
 
 **runner 并发语义**（D010 增）：六源线程池并发执行（网络 IO 密集），入库/水位线更新在主线程串行；`run_all(on_report=...)` 支持完成即回调（UI 实时进度），返回值保持注入顺序与完成先后无关。
 
-**分级超时**（D010 增）：基类 `_fetch_or_none` 带 ThreadPoolExecutor 超时保护（默认 60s）；新闻维度（财联社接口在本机网络持续挂起）在 factory 单独收紧为 20s。
+**分级超时**（D010 增）：基类 `_fetch_or_none` 带 ThreadPoolExecutor 超时保护（默认 60s）；新闻维度在 factory 单独收紧为 20s（财联社接口曾持续挂起，现已弃用换东财主源，收紧超时仍保留以防新闻源网络波动）。
 
 **akshare 兼容策略**：版本钉死在 `pyproject.toml`；接口名以实施当日实测为准，设计文档中接口名为候选。实测偏差：`index_bdi_hist` 已被移除→迁移 `macro_shipping_bdi`；`spot_hist_sge` 列名变为 date/close。
+
+**事件来源链接**（2026-11-02 增）：每条 `MonitorEvent.url` 必填参考链接，UI 展开事件显示「来源链接」。各维度取值：
+
+| 维度 | url 来源 |
+|---|---|
+| 持仓公告 | 接口「网址」列（公告原文） |
+| 每日要闻 | 东财「链接」列（单条原文）；新浪 fallback 用新浪财经首页 |
+| 宏观指标 | 国家统计局 / 中国人民银行官网（按指标） |
+| 美联储 | 美联储官网 |
+| 行业指标 | 上海黄金交易所 / 波罗的海交易所（按指标） |
+| 重大会议 | 中国政府网 |
 
 ## 6. 前端改造（`app/ui/`）
 
@@ -171,3 +182,8 @@ UI 不做自动化测试（Streamlit 特性），语法校验 + 手动冒烟。
 3. **e2e 实跑发现的 akshare 接口变更**：`index_bdi_hist` 移除→`macro_shipping_bdi`；`spot_hist_sge` 列名变为 date/close（§5 已同步）。
 4. **投研顾问页概览卡片**：新增 `app/retrieval/stats.py`（纯函数统计）+ 切片元数据 `indexed_at` 时间戳；旧数据缺该字段由统计层兜底。
 5. **修复**：`st.Page` 显式 `url_path`（双页面入口函数同名致 pathname 冲突）。
+6. **每日要闻新闻源切换 + 全维度来源链接**（2026-11-02）：
+   - **优化前**：news 主源财联社 `stock_info_global_cls` 在本机网络持续挂起（探针 >25s 无响应），20s 超时降级为空 → 每日要闻恒 0；且除持仓公告外各维度事件无 url，UI 无链接可点。
+   - **思路**：探针实测三源——cls 挂起、东财 `stock_info_global_em` 返回 200 条且自带单条原文 URL、新浪 20 条无链接。选东财为主源（数据多 + 带链接，一举解决恒 0 与链接两问题），新浪作 fallback 保鲁棒；无单条链接的维度（宏观/美联储/行业/会议）填官方数据源页作参考链接。
+   - **优化后**：每日要闻实测 200 条带链接；全维度事件 url 非空，UI 文案统一「来源链接」。
+   - **最新设计**：`news.py` 内 `_collect_em()`/`_collect_sina()` 双源，em 空/失败降级 sina；sina 无标题列取内容前 40 字作标题、链接用新浪首页。各维度 url 来源见 §5「事件来源链接」表。
