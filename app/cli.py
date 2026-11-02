@@ -29,6 +29,7 @@ def format_answer(result: RagAnswer) -> str:
 
 def run(pipeline, input_fn=input, output=print) -> None:
     output("⚙️ DeepFinResearch 投研顾问（输入 /exit 退出）")
+    history: list[dict[str, str]] = []
     while True:
         try:
             question = input_fn("❯ ").strip()
@@ -42,13 +43,15 @@ def run(pipeline, input_fn=input, output=print) -> None:
             output("再见。")
             return
         try:
-            result = pipeline.answer(question)
+            result = pipeline.answer(question, history=list(history))
         except KeyboardInterrupt:
             output("已中断，继续。")
             continue
         except Exception as e:  # noqa: BLE001
             output(f"⚠️ 出错了：{e}")
             continue
+        history.append({"role": "user", "content": question})
+        history.append({"role": "assistant", "content": result.answer})
         output(format_answer(result))
 
 

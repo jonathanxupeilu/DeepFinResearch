@@ -146,6 +146,7 @@ def render() -> None:
             st.markdown(msg["content"])
 
     if question := st.chat_input("输入你的问题…"):
+        history = list(st.session_state.messages)  # 本轮之前的上下文，供追问锚定原话题
         st.session_state.messages.append({"role": "user", "content": question})
         with st.chat_message("user"):
             st.markdown(question)
@@ -154,7 +155,7 @@ def render() -> None:
             with st.spinner("思考并查证中…"):
                 result: RagAnswer | None
                 try:
-                    result = get_pipeline().answer(question)
+                    result = get_pipeline().answer(question, history=history)
                 except Exception:  # noqa: BLE001 — UI 兜底，任何生成异常都转为错误提示
                     result = None
             if result is None:

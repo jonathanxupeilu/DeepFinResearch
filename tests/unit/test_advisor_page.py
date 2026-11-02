@@ -4,6 +4,7 @@
 from streamlit.testing.v1 import AppTest
 
 SCRIPT = """
+import json
 import os
 from pathlib import Path
 
@@ -13,7 +14,12 @@ from app.models import Citation, RagAnswer, TraceStep
 
 
 class FakePipeline:
-    def answer(self, question):
+    def answer(self, question, history=None):
+        with open(os.environ["CALL_LOG"], "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps({"q": question, "history": history or []}, ensure_ascii=False)
+                + "\\n"
+            )
         return RagAnswer(
             answer="护城河是指…… [1]",
             citations=[Citation(marker=1, source="https://n.cn/1", text="联网片段")],
@@ -43,6 +49,7 @@ advisor.render()
 
 def _make_at(tmp_path, monkeypatch) -> AppTest:
     monkeypatch.setenv("CHAT_STORE_PATH", str(tmp_path / "chat.json"))
+    monkeypatch.setenv("CALL_LOG", str(tmp_path / "calls.jsonl"))
     script = tmp_path / "advisor_page.py"
     script.write_text(SCRIPT, encoding="utf-8")
     return AppTest.from_file(str(script), default_timeout=30)
@@ -66,6 +73,26 @@ def test_advisor_first_render_no_exception(tmp_path, monkeypatch):
     at.run()
     assert not at.exception
     assert at.title  # 页面标题渲染
+
+
+def test_advisor_second_question_carries_history(tmp_path, monkeypatch):
+    import json
+
+    call_log = tmp_path / "calls.jsonl"
+    at = _make_at(tmp_path, monkeypatch)
+    at.run()
+    at.chat_input[0].set_value("什么是护城河？").run()
+    at.chat_input[0].set_value("补充一点：消费行业呢？").run()
+    assert not at.exception
+    calls = [
+        json.loads(line) for line in call_log.read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(calls) == 2
+    assert calls[0]["history"] == []
+    assert calls[1]["history"] == [
+        {"role": "user", "content": "什么是护城河？"},
+        {"role": "assistant", "content": "护城河是指…… [1]"},
+    ]
 
 
 def test_advisor_history_saved_and_resumable(tmp_path, monkeypatch):

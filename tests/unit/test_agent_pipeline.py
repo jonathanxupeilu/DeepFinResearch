@@ -206,3 +206,27 @@ def test_assistant_message_arguments_serialized_as_json():
     agent.answer("x")
     raw = llm.rounds[1][2]["tool_calls"][0]["function"]["arguments"]
     assert json.loads(raw) == {"query": "中文"}
+
+
+def test_history_injected_between_system_and_question():
+    agent, llm, _ = make_agent([ChatResponse(content="结合上轮黄金板块作答")])
+    history = [
+        {"role": "user", "content": "最近黄金板块巨大波动的原因有哪些？"},
+        {"role": "assistant", "content": "美联储、地缘、资金三方面"},
+    ]
+    agent.answer("我补充三个思考维度", history=history)
+    msgs = llm.rounds[0]
+    assert msgs[1] == {"role": "user", "content": "最近黄金板块巨大波动的原因有哪些？"}
+    assert msgs[2] == {"role": "assistant", "content": "美联储、地缘、资金三方面"}
+    assert msgs[3] == {"role": "user", "content": "我补充三个思考维度"}
+
+
+def test_history_capped_and_content_truncated():
+    agent, llm, _ = make_agent([ChatResponse(content="ok")])
+    history = [{"role": "user", "content": f"q{i}"} for i in range(14)]
+    history[-1]["content"] = "x" * 2000
+    agent.answer("now", history=history)
+    msgs = llm.rounds[0]
+    assert len(msgs) == 1 + 10 + 1  # system + 最近 10 条历史 + 本轮问题
+    assert msgs[1]["content"] == "q4"  # 只保留最近 10 条
+    assert len(msgs[-2]["content"]) == 1500  # 超长单条被截断

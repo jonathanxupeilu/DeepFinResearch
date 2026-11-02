@@ -14,6 +14,8 @@ from app.tools.base import Evidence
 from app.tools.registry import ToolRegistry
 
 _OBSERVATION_SUMMARY_LIMIT = 200
+_MAX_HISTORY_TURNS = 10  # 注入的历史消息条数上限，防长对话挤占证据与推理窗口
+_HISTORY_CONTENT_LIMIT = 1500  # 单条历史截断长度，防超长旧回答吞掉 token
 
 
 class AgentPipeline:
@@ -29,11 +31,19 @@ class AgentPipeline:
         self.max_iterations = max_iterations  # 熔断：防工具调用死循环
         self.system_prompt = system_prompt  # 五期多 Agent：注入角色化提示词
 
-    def answer(self, question: str) -> RagAnswer:
-        messages: list[dict] = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": question},
-        ]
+    def answer(
+        self, question: str, history: list[dict[str, str]] | None = None
+    ) -> RagAnswer:
+        """history：本轮之前的 user/assistant 消息序列，追问靠它锚定原话题。"""
+        messages: list[dict] = [{"role": "system", "content": self.system_prompt}]
+        for turn in (history or [])[-_MAX_HISTORY_TURNS:]:
+            messages.append(
+                {
+                    "role": turn["role"],
+                    "content": turn["content"][:_HISTORY_CONTENT_LIMIT],
+                }
+            )
+        messages.append({"role": "user", "content": question})
         evidence: list[Evidence] = []
         trace: list[TraceStep] = []
         for step in range(1, self.max_iterations + 1):

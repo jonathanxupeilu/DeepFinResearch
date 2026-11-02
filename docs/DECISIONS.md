@@ -158,10 +158,22 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 - Tavily：Bearer 鉴权 + `time_range` 均经真实调用验证；工具层异常一律降级为观察文本，循环不崩
 - Streamlit `st.cache_resource` 会缓存旧 pipeline/工具注册表：改 prompt 或工具代码后必须重启进程，仅刷新页面不生效
 - Streamlit 路由两连坑（症状：直达 `/advisor` 空白页 + fallback 导航 webapp/advisor/monitor）：① `st.navigation` 强制默认页 `url_path=""`（只挂根路径），首个页面的显式 url_path 被忽略；② 入口旁存在 `pages/` 魔法目录时，冷启动直达未匹配 URL 会**绕过入口文件**直接执行 pages 下的同名脚本（模块层无 render() 调用 → 空白页），st.navigation 根本没机会运行。修复：`app/ui/pages/` 改名 `app/ui/views/`（去魔法）+ 默认页用包装函数、另注册 `visibility="hidden"` 别名页占住 `/advisor` 路由；三 URL（/ /advisor /monitor）浏览器实测均正常
+- MagicMock 记录的是调用参数的**对象引用**：传入的 list 在调用后被原地追加，断言时看到的是变更后内容（症状：`assert_called_once_with(q, history=[])` 报 actual 含本轮问答）。调用方传拷贝（`history=list(history)`）而非改断言
 
 ---
 
 # 变更记录（原 CHANGELOG.md 内容并入）
+
+## [Unreleased]（2026-11-02 · 三期修订五：多轮对话上下文）
+
+### Changed
+- **Agent 接入多轮上下文**（用户实测：追问「补充三个思考维度」脱离黄金板块
+  主题、检索到晶圆/光伏等无关证据）：`AgentPipeline.answer(question, history)`
+  在 system 与本轮问题之间注入历史 user/assistant 消息（最近 10 条、单条截断
+  1500 字）；advisor 页传当前会话上下文，cli 逐轮累积；提示词新增规则 11：
+  追问/补充维度必须结合原话题，检索 query 与回答不得丢主题词
+  （`app/pipeline/agent.py`、`prompts.py`、`app/ui/views/advisor.py`、`app/cli.py`）
+- 测试：agent 历史注入/截断 2 例 + cli 累积 1 例 + 页面二轮带历史 1 例（224 通过）
 
 ## [Unreleased]（2026-11-02 · 历史对话面板排版修订）
 

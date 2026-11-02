@@ -65,8 +65,23 @@ def test_run_repl_loop():
     inputs = iter(["什么是护城河？", "/exit"])
     out: list[str] = []
     run(pipeline, input_fn=lambda _: next(inputs), output=out.append)
-    pipeline.answer.assert_called_once_with("什么是护城河？")
+    pipeline.answer.assert_called_once_with("什么是护城河？", history=[])
     assert any("回答内容" in line for line in out)
+
+
+def test_run_passes_accumulated_history():
+    pipeline = MagicMock()
+    pipeline.answer.side_effect = [
+        RagAnswer(answer="回答一"),
+        RagAnswer(answer="回答二"),
+    ]
+    inputs = iter(["q1", "q2", "/exit"])
+    run(pipeline, input_fn=lambda _: next(inputs), output=lambda _: None)
+    second = pipeline.answer.call_args_list[1]
+    assert second.kwargs["history"] == [
+        {"role": "user", "content": "q1"},
+        {"role": "assistant", "content": "回答一"},
+    ]
 
 
 def test_run_survives_answer_exception():
@@ -90,7 +105,7 @@ def test_run_ignores_blank_and_eof():
     out: list[str] = []
     run(pipeline, input_fn=lambda _: next(inputs), output=out.append)
     # 空白输入被忽略，只有"有效问题"触发了回答
-    pipeline.answer.assert_called_once_with("有效问题")
+    pipeline.answer.assert_called_once_with("有效问题", history=[])
     assert any("x" in line for line in out)
 
 
