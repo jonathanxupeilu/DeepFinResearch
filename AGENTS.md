@@ -56,7 +56,7 @@ cli.py / webapp.py → factory ─→ pipeline/agent.py（三期默认入口，R
 |---|---|---|
 | `app/pipeline/agent.py` | 三期 AgentPipeline：function calling ReAct 循环、全局证据编号 [n]、未知工具/失败容错、max_iterations 熔断后强制终答 | 与 rag.py 并列为 prompt 收口；系统提示词静态常量（时间靠 current_time 工具，D016）；五期多 Agent 在此注入角色 system_prompt |
 | `app/pipeline/rag.py` | 检索→prompt→LLM→RagAnswer 带引用；空检索诚实拒答；闲聊分流 | 单轮快速通道（e2e 基线），Agent 入口已废除闲聊正则 |
-| `app/pipeline/prompts.py` | SYSTEM_PROMPT / AGENT_SYSTEM_PROMPT / USER_TEMPLATE / 拒答文案 / 闲聊正则 | 所有面向用户的文案常量放这里，不散落 |
+| `app/pipeline/prompts.py` | **全部 prompt 唯一修改入口**：SYSTEM_PROMPT / AGENT_SYSTEM_PROMPT / USER_TEMPLATE / 拒答文案 / 闲聊正则 / 三个工具的 description 与参数描述常量 | 调优任何话术只改此文件；不散落 |
 | `app/pipeline/citations.py` | 引用构建共享逻辑（按 [n] 标注过滤/越界忽略/无标注保留全部） | rag 与 agent 共用，改语义两处同时生效 |
 | `app/tools/base.py` | Tool Protocol + ToolSpec/ToolResult/Evidence（Pydantic） | 工具内部 catch 全部异常降级失败文本；Evidence 不编号，编号归循环层 |
 | `app/tools/registry.py` | ToolRegistry：注册（重名拒绝）/get/openai_tools() | 新工具 = 一个类 + factory 注册一行 |

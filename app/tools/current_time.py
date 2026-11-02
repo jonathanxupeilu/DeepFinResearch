@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from app.pipeline.prompts import CURRENT_TIME_DESCRIPTION
 from app.tools.base import ToolResult, ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -15,10 +16,7 @@ _WEEKDAYS = "一二三四五六日"
 
 _SPEC = ToolSpec(
     name="current_time",
-    description=(
-        "获取当前日期时间与星期（北京时间）。问题涉及「最近/近期/今天/本周」等"
-        "时间词，或联网搜索需要构造时间关键词时，先调用本工具确定当前时间基准。"
-    ),
+    description=CURRENT_TIME_DESCRIPTION,
     parameters={"type": "object", "properties": {}},
 )
 

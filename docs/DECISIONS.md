@@ -140,6 +140,14 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 
 # 变更记录（原 CHANGELOG.md 内容并入）
 
+## [Unreleased]（2026-11-02 · 三期修订三：prompt 全量收口 prompts.py）
+
+### Changed
+- **工具描述文案迁移**：knowledge_search/web_search/current_time 的
+  description 与参数描述（LLM 决策依据，本质是 prompt）从各工具文件迁入
+  `app/pipeline/prompts.py` 常量——手动调优任何 prompt 只改一个文件
+- 当日踩坑与「时间锚定三步演进」优化逻辑记录于三期设计文档 §13
+
 ## [Unreleased]（2026-11-02 · 三期修订二：current_time 工具化）
 
 ### Added

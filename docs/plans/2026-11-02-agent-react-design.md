@@ -176,3 +176,20 @@ tavily_max_results: int = 5
 4. factory 无条件注册 current_time（无 Key 也具备：knowledge_search + current_time）；advisor 页工具标签「🕐 当前时间」
 
 **取舍**：多一轮工具调用（时间敏感问题）换取架构一致性——工具能力全部经注册表声明、由 LLM 自主决策，系统提示词保持静态常量，五期角色 prompt 复用无副作用。
+
+## 13. 踩坑与优化记录（2026-11-02 当日）
+
+**回答质量优化三步演进**（用户实测驱动）：
+1. 三期上线 → 实测「A股黄金板块最近波动为什么这么大」回答泛泛而谈：无时间区间、未说明涨跌方向
+2. 根因：LLM 无当前时间概念，「最近」解析不了 → D015 系统消息写死注入日期行 + 「先事实后原因」规则 + Tavily time_range
+3. 用户反馈「应让 Agent 自主判断是否调用获取时间工具，而非写死」→ D016 撤销注入，新增 current_time 工具，提示词明示「你没有当前时间的概念」
+
+**工程踩坑**：
+- `.env` 分隔符：`TAVILY_API_KEY:值`（冒号）无效——pydantic-settings 只认 `=`；症状是 grep 能看到 Key 名但 Settings 读到空串、web_search 静默未注册。排查手法：只打印值长度不打印值
+- `MagicMock(id=..., name=...)` 构造参数是 mock 元信息**不会**设置 `.id`/`.name` 属性，必须显式赋值，否则 Pydantic 校验收到 MagicMock 对象报错
+- Protocol 成员声明为 `run: Callable[...]` 属性时，mypy 要求"可写变量"，普通类方法（只读）不满足——Tool Protocol 的 run 必须用方法语法声明
+- ruff RUF100：noqa 引用未启用的规则（如 A002）本身会报错
+- 被 black 重排过的文件再 Edit 会因 old_string 不匹配失败，编辑前先重新 Read
+- Tavily：Bearer 鉴权 + `time_range` 参数均经真实调用验证；工具层异常一律降级为观察文本，循环不崩
+
+**prompt 收口补全**：工具 description/参数描述（LLM 决策依据，本质是 prompt）从各工具文件迁入 prompts.py 常量——手动调优任何 prompt（系统提示词/文案/工具话术）只改 prompts.py 一个文件。

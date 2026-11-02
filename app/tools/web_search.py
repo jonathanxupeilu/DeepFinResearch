@@ -6,6 +6,11 @@ from typing import Any
 
 import httpx
 
+from app.pipeline.prompts import (
+    WEB_SEARCH_DESCRIPTION,
+    WEB_SEARCH_QUERY_DESCRIPTION,
+    WEB_SEARCH_TIME_RANGE_DESCRIPTION,
+)
 from app.tools.base import Evidence, ToolResult, ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -14,21 +19,18 @@ _TAVILY_URL = "https://api.tavily.com/search"
 
 _SPEC = ToolSpec(
     name="web_search",
-    description=(
-        "联网搜索最新市场资讯、新闻与知识库之外的信息。"
-        "需要时效性内容（近期事件、最新数据）或知识库检索不足时调用；query 用简体中文关键词。"
-    ),
+    description=WEB_SEARCH_DESCRIPTION,
     parameters={
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "搜索关键词（简体中文，时效性问题须带明确时间词）",
+                "description": WEB_SEARCH_QUERY_DESCRIPTION,
             },
             "time_range": {
                 "type": "string",
                 "enum": ["day", "week", "month", "year"],
-                "description": "限定结果时间范围；查近期行情/新闻时用 week 或 month",
+                "description": WEB_SEARCH_TIME_RANGE_DESCRIPTION,
             },
         },
         "required": ["query"],

@@ -44,3 +44,28 @@ _SMALLTALK_RE = re.compile(
 
 def is_smalltalk(text: str) -> bool:
     return bool(_SMALLTALK_RE.match(text.strip()))
+
+
+# ---------------------------------------------------------------------------
+# 工具描述文案（LLM 决策依据，本质也是 prompt）：全部收口本文件，改工具话术不动工具代码
+# ---------------------------------------------------------------------------
+
+KNOWLEDGE_SEARCH_DESCRIPTION = (
+    "在本地投研知识库中语义检索资料。回答涉及知识库文档内容、"
+    "需要事实依据或引用时优先调用；query 用简体中文关键词或问句。"
+)
+KNOWLEDGE_SEARCH_QUERY_DESCRIPTION = "检索词（简体中文关键词或问句）"
+
+WEB_SEARCH_DESCRIPTION = (
+    "联网搜索最新市场资讯、新闻与知识库之外的信息。"
+    "需要时效性内容（近期事件、最新数据）或知识库检索不足时调用；query 用简体中文关键词。"
+)
+WEB_SEARCH_QUERY_DESCRIPTION = "搜索关键词（简体中文，时效性问题须带明确时间词）"
+WEB_SEARCH_TIME_RANGE_DESCRIPTION = (
+    "限定结果时间范围；查近期行情/新闻时用 week 或 month"
+)
+
+CURRENT_TIME_DESCRIPTION = (
+    "获取当前日期时间与星期（北京时间）。问题涉及「最近/近期/今天/本周」等"
+    "时间词，或联网搜索需要构造时间关键词时，先调用本工具确定当前时间基准。"
+)

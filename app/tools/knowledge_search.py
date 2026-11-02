@@ -4,6 +4,10 @@
 import logging
 from typing import Any
 
+from app.pipeline.prompts import (
+    KNOWLEDGE_SEARCH_DESCRIPTION,
+    KNOWLEDGE_SEARCH_QUERY_DESCRIPTION,
+)
 from app.retrieval.retriever import Retriever
 from app.tools.base import Evidence, ToolResult, ToolSpec
 
@@ -11,16 +15,13 @@ logger = logging.getLogger(__name__)
 
 _SPEC = ToolSpec(
     name="knowledge_search",
-    description=(
-        "在本地投研知识库中语义检索资料。回答涉及知识库文档内容、"
-        "需要事实依据或引用时优先调用；query 用简体中文关键词或问句。"
-    ),
+    description=KNOWLEDGE_SEARCH_DESCRIPTION,
     parameters={
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "检索词（简体中文关键词或问句）",
+                "description": KNOWLEDGE_SEARCH_QUERY_DESCRIPTION,
             }
         },
         "required": ["query"],
