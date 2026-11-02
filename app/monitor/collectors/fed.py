@@ -14,9 +14,28 @@ _COL_DATE = "日期"
 _COL_TIME = "时间"
 _COL_EVENT = "事件"
 _COL_REGION = "地区"
+_COL_ACTUAL = "公布"
+_COL_EXPECT = "预期"
+_COL_PREV = "前值"
+_COL_IMPORTANCE = "重要性"
 
 _KEYWORDS = ("FOMC", "美联储", "利率决议")
 _FED_REF_URL = "https://www.federalreserve.gov/"
+
+
+def _build_content(row: pd.Series, region: str) -> str:
+    """组合地区与公布/预期/前值/重要性为正文，NaN 字段跳过，避免"无内容"。"""
+    parts = [f"地区：{region}"]
+    for label, col in (
+        ("公布", _COL_ACTUAL),
+        ("预期", _COL_EXPECT),
+        ("前值", _COL_PREV),
+        ("重要性", _COL_IMPORTANCE),
+    ):
+        value = row.get(col)
+        if not pd.isna(value):
+            parts.append(f"{label}：{value}")
+    return "；".join(parts)
 
 
 class FedCollector(AkshareCollector):
@@ -48,6 +67,7 @@ class FedCollector(AkshareCollector):
                         dimension=self.dimension,
                         title=text,
                         source="akshare:news_economic_baidu",
+                        content=_build_content(row, str(region)),
                         url=_FED_REF_URL,
                         published_at=self._parse_datetime(
                             f"{row.get(_COL_DATE)} {row.get(_COL_TIME)}"

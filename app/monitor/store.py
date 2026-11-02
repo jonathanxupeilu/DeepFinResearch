@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS events (
     source TEXT NOT NULL,
     published_at TEXT,
     collected_at TEXT NOT NULL,
+    value REAL,
     content_hash TEXT NOT NULL UNIQUE
 );
 CREATE INDEX IF NOT EXISTS idx_events_dim_time ON events(dimension, published_at DESC);
@@ -40,6 +41,14 @@ class EventStore:
     def __init__(self, db_path: Path):
         self._conn = sqlite3.connect(db_path)
         self._conn.executescript(_SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """存量库补列：events.value（指标折线图迭代引入），新库由 _SCHEMA 直接创建。"""
+        cols = {r[1] for r in self._conn.execute("PRAGMA table_info(events)")}
+        if "value" not in cols:
+            self._conn.execute("ALTER TABLE events ADD COLUMN value REAL")
+            self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()
@@ -56,7 +65,8 @@ class EventStore:
             for e in events:
                 cur = self._conn.execute(
                     "INSERT OR IGNORE INTO events (dimension, title, content, url, source,"
-                    " published_at, collected_at, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    " published_at, collected_at, value, content_hash)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         e.dimension.value,
                         e.title,
@@ -65,6 +75,7 @@ class EventStore:
                         e.source,
                         e.published_at.isoformat() if e.published_at else None,
                         e.collected_at.isoformat(),
+                        e.value,
                         _content_hash(e),
                     ),
                 )
@@ -82,7 +93,7 @@ class EventStore:
         self, dimension: Dimension | None = None, limit: int = 100
     ) -> list[MonitorEvent]:
         sql = (
-            "SELECT dimension, title, source, content, url, published_at, collected_at"
+            "SELECT dimension, title, source, content, url, published_at, collected_at, value"
             " FROM events"
         )
         params: list[str] = []
@@ -101,6 +112,7 @@ class EventStore:
                 url=r[4],
                 published_at=datetime.fromisoformat(r[5]) if r[5] else None,
                 collected_at=datetime.fromisoformat(r[6]),
+                value=r[7],
             )
             for r in rows
         ]
@@ -138,5 +150,11 @@ class EventStore:
         cur = self._conn.execute(
             "DELETE FROM events WHERE collected_at < ?", (cutoff.isoformat(),)
         )
+        self._conn.commit()
+        return cur.rowcount
+
+    def purge_empty_url(self) -> int:
+        """删除 url 为空的存量旧事件（来源链接上线前的版本），消除同名重复，返回删除条数。"""
+        cur = self._conn.execute("DELETE FROM events WHERE url = ''")
         self._conn.commit()
         return cur.rowcount

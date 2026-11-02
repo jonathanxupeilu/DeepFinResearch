@@ -22,6 +22,7 @@ class MonitorEvent(BaseModel):
     url: str = ""
     published_at: datetime | None = None
     collected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    value: float | None = None  # 指标类事件的数值（折线图用）；事件类为 None
 
     @field_validator("title", "source")
     @classmethod

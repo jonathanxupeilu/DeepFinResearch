@@ -1,10 +1,12 @@
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # 保证本模块被独立导入时也可解析 app 包
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
+import pandas as pd  # type: ignore[import-untyped]
 import streamlit as st
 
 from app.factory import (
@@ -19,6 +21,16 @@ from app.monitor.models import CollectReport, Dimension, MonitorEvent
 
 _REPORTS_KEY = "collect_reports"
 _RETENTION_DAYS = 30  # 事件保留天数：超过自动清理
+
+# 事件类维度（列表展示）与指标类维度（折线图展示）分离
+_EVENT_DIMS = [
+    Dimension.ANNOUNCEMENT,
+    Dimension.NEWS,
+    Dimension.FED,
+    Dimension.POLICY,
+]
+_SERIES_DIMS = [Dimension.MACRO, Dimension.INDUSTRY]
+_PERIODS = {"近1年": 365, "近3年": 365 * 3, "近5年": 365 * 5, "近10年": 365 * 10}
 
 
 def _show_holdings_hint() -> None:
@@ -38,14 +50,46 @@ def _show_metrics() -> None:
     except Exception:  # noqa: BLE001 — UI 兜底，存储异常转为错误提示
         st.error("读取监控数据失败，请稍后重试")
         return
-    cols = st.columns(len(Dimension))
-    for col, dim in zip(cols, Dimension):
+    cols = st.columns(len(_EVENT_DIMS))
+    for col, dim in zip(cols, _EVENT_DIMS):
         col.metric(dim.value, counts.get(dim, 0))  # counts_by_dimension 不含 0 计数维度
+
+
+def _show_series_charts() -> None:
+    """指标趋势折线图：宏观/行业近 N 年序列默认展示在主页，期间可选。"""
+    st.subheader("📈 指标趋势")
+    period = st.selectbox("历史期间", list(_PERIODS), index=0)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=_PERIODS[period])
+    try:
+        with build_monitor_store() as store:
+            events = [
+                e for dim in _SERIES_DIMS for e in store.list_events(dim, limit=10000)
+            ]
+    except Exception:  # noqa: BLE001 — UI 兜底，存储异常转为错误提示
+        st.error("读取指标数据失败，请稍后重试")
+        return
+    series: dict[str, list[tuple[datetime, float]]] = {}
+    for e in events:
+        if e.value is None or e.published_at is None or e.published_at < cutoff:
+            continue
+        series.setdefault(e.title, []).append((e.published_at, e.value))
+    if not series:
+        st.info("暂无指标数据，点击上方「🔄 立即采集」获取")
+        return
+    for title, points in sorted(series.items()):
+        df = (
+            pd.DataFrame(sorted(points, key=lambda p: p[0]), columns=["date", "value"])
+            .groupby("date")
+            .last()
+        )
+        st.markdown(f"**{title}**")
+        st.line_chart(df["value"])
 
 
 def _collect_now() -> None:
     reports: list[CollectReport] = []
     purged = 0
+    deduped = 0
     try:
         with st.status("正在采集六维度数据…", expanded=True) as status:
             runner = build_monitor_runner()
@@ -61,6 +105,8 @@ def _collect_now() -> None:
                 runner.run_all(on_report=_on_report)
                 # 存量过时自动清理
                 purged = runner.store.purge_before(_RETENTION_DAYS)
+                # 来源链接上线前的无链接旧版本清理（消除同名重复）
+                deduped = runner.store.purge_empty_url()
             finally:
                 runner.store.close()
         status.update(label="采集完成", state="complete", expanded=False)
@@ -69,6 +115,8 @@ def _collect_now() -> None:
         return
     if purged:
         st.caption(f"🧹 已自动清理 {purged} 条超过 {_RETENTION_DAYS} 天的过期事件")
+    if deduped:
+        st.caption(f"🧹 已清理 {deduped} 条无来源链接的旧版本重复事件")
     st.session_state[_REPORTS_KEY] = reports
 
 
@@ -139,9 +187,10 @@ def render() -> None:
 
     _show_holdings_hint()
     _show_metrics()
+    _show_series_charts()
 
     st.button("🔄 立即采集", on_click=_collect_now)
     _show_reports()
 
-    dim_label = st.selectbox("维度筛选", ["全部"] + [d.value for d in Dimension])
+    dim_label = st.selectbox("维度筛选", ["全部"] + [d.value for d in _EVENT_DIMS])
     _show_events(None if dim_label == "全部" else Dimension(dim_label))

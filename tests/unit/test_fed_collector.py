@@ -74,3 +74,26 @@ def test_bad_time_parsed_to_none():
     events = FedCollector(ak=ak).collect()
     assert len(events) == 1
     assert events[0].published_at is None
+
+
+def test_content_includes_actual_and_prev():
+    # 正文组合地区/公布/前值/重要性，NaN 字段跳过，避免"无内容"
+    ak = MagicMock()
+    ak.news_economic_baidu.return_value = pd.DataFrame(
+        {
+            "日期": [date(2026, 11, 5)],
+            "时间": [time(3, 0)],
+            "事件": ["FOMC利率决议"],
+            "地区": ["美国"],
+            "公布": ["4.25"],
+            "预期": [float("nan")],
+            "前值": [4.50],
+            "重要性": ["3"],
+        }
+    )
+    events = FedCollector(ak=ak).collect()
+    assert len(events) == 1
+    assert "地区：美国" in events[0].content
+    assert "公布：4.25" in events[0].content
+    assert "前值：4.5" in events[0].content
+    assert "预期" not in events[0].content  # NaN 字段跳过

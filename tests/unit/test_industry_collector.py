@@ -77,3 +77,25 @@ def test_nan_date_row_skipped():
     events = IndustryCollector(ak=ak).collect()
     assert len(events) == 1
     assert events[0].title == "BDI运价"
+
+
+def test_industry_multi_period_series_with_value():
+    # 近 10 年逐期存事件（折线图序列），value 为结构化数值
+    ak = MagicMock()
+    ak.spot_hist_sge.return_value = pd.DataFrame(
+        {"date": ["2026-10-28", "2026-10-29"], "close": [779.0, 780.5]}
+    )
+    ak.macro_shipping_bdi.return_value = pd.DataFrame({"日期": [], "最新值": []})
+    events = IndustryCollector(ak=ak).collect()
+    assert len(events) == 2
+    assert [e.value for e in events] == [779.0, 780.5]
+    assert events[0].published_at is not None
+
+
+def test_industry_old_period_filtered_out():
+    ak = MagicMock()
+    ak.spot_hist_sge.return_value = pd.DataFrame(
+        {"date": ["2010-01-04"], "close": [300.0]}
+    )
+    ak.macro_shipping_bdi.return_value = pd.DataFrame({"日期": [], "最新值": []})
+    assert IndustryCollector(ak=ak).collect() == []

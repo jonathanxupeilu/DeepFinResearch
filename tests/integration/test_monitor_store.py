@@ -59,6 +59,29 @@ def test_hash_includes_dimension(tmp_path):
     assert added == 1 and s.count() == 2
 
 
+def test_purge_empty_url_removes_legacy(tmp_path):
+    # 来源链接上线前的无链接旧版本清理，消除同名重复
+    s = EventStore(tmp_path / "m.db")
+    s.save_events([make_event("旧版", url=""), make_event("新版", url="https://x")])
+    assert s.count() == 2
+    removed = s.purge_empty_url()
+    assert removed == 1 and s.count() == 1
+    assert s.list_events()[0].url == "https://x"
+
+
+def test_value_roundtrip(tmp_path):
+    s = EventStore(tmp_path / "m.db")
+    s.save_events([make_event("cpi", dim=Dimension.MACRO, value=0.4)])
+    got = s.list_events(dimension=Dimension.MACRO)
+    assert got[0].value == 0.4
+
+
+def test_value_default_none(tmp_path):
+    s = EventStore(tmp_path / "m.db")
+    s.save_events([make_event("plain")])
+    assert s.list_events()[0].value is None
+
+
 def test_null_published_at_sorts_last(tmp_path):
     s = EventStore(tmp_path / "m.db")
     s.save_events(

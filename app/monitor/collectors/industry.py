@@ -1,6 +1,6 @@
 # app/monitor/collectors/industry.py
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -14,6 +14,8 @@ _SGE_DATE_COL = "date"
 _SGE_CLOSE_COL = "close"
 _BDI_DATE_COL = "日期"
 _BDI_CLOSE_COL = "最新值"
+# 折线图最大期间为 10 年，只存近 10 年序列，控制 events 表膨胀
+_MAX_HISTORY_YEARS = 10
 
 
 class IndustryCollector(AkshareCollector):
@@ -39,28 +41,34 @@ class IndustryCollector(AkshareCollector):
                 "https://www.balticexchange.com/",
             ),
         ]
+        cutoff = datetime.now(timezone.utc) - timedelta(days=365 * _MAX_HISTORY_YEARS)
         events: list[MonitorEvent] = []
         for name, func, date_col, value_col, api_name, url in indicators:
             try:
                 df: pd.DataFrame = func()
                 if not isinstance(df, pd.DataFrame) or df.empty:
                     raise ValueError("返回数据非 DataFrame 或为空")
-                row = df.iloc[-1]
-                # I4 防御：末行日期/数值为 NaN 时跳过，不产出脏事件
-                if pd.isna(row[date_col]) or pd.isna(row[value_col]):
-                    logger.warning("行业指标 %s 末行日期/数值为 NaN，跳过", name)
-                    continue
-                content = f"{name}: {row[value_col]}（{row[date_col]}）"
-                events.append(
-                    MonitorEvent(
-                        dimension=self.dimension,
-                        title=name,
-                        source=f"akshare:{api_name}",
-                        content=content,
-                        url=url,
-                        published_at=self._parse_datetime(row[date_col]),
-                    )
-                )
+                # 近 10 年逐期存事件（折线图时间序列）；content_hash 去重保证重复采集不膨胀
+                for _, row in df.iterrows():
+                    try:
+                        if pd.isna(row[date_col]) or pd.isna(row[value_col]):
+                            continue
+                        date_dt = self._parse_datetime(row[date_col])
+                        if date_dt is None or date_dt < cutoff:
+                            continue
+                        events.append(
+                            MonitorEvent(
+                                dimension=self.dimension,
+                                title=name,
+                                source=f"akshare:{api_name}",
+                                content=f"{name}: {row[value_col]}（{row[date_col]}）",
+                                url=url,
+                                published_at=date_dt,
+                                value=float(row[value_col]),
+                            )
+                        )
+                    except Exception as e:  # noqa: BLE001 单期坏数据只跳过该期
+                        logger.warning("行业指标 %s 跳过坏期: %s", name, e)
             except Exception as e:  # noqa: BLE001 单指标失败不炸整体
                 logger.warning("行业指标 %s 采集失败: %s", name, e)
         return events

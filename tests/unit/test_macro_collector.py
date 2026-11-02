@@ -73,3 +73,33 @@ def test_macro_missing_column_skipped_others_collected():
     events = MacroCollector(ak=ak).collect()
     assert len(events) == 1
     assert events[0].title == "CPI"
+
+
+def test_macro_multi_period_series_with_value():
+    # 全历史逐期存事件（折线图序列），value 为结构化数值
+    ak = MagicMock()
+    ak.macro_china_cpi.return_value = pd.DataFrame(
+        {"月份": ["2026年9月份", "2026年8月份"], "全国-同比增长": [0.4, 0.6]}
+    )
+    ak.macro_china_pmi.return_value = pd.DataFrame({"月份": [], "制造业-同比增长": []})
+    ak.macro_china_shrzgm.return_value = pd.DataFrame(
+        {"月份": [], "社会融资规模增量": []}
+    )
+    events = MacroCollector(ak=ak).collect()
+    assert len(events) == 2
+    assert [e.value for e in events] == [0.4, 0.6]
+    assert events[0].published_at is not None
+    assert (events[0].published_at.year, events[0].published_at.month) == (2026, 9)
+
+
+def test_macro_old_period_filtered_out():
+    # 超 10 年的旧期不存（折线图最大期间 10 年，控制 events 膨胀）
+    ak = MagicMock()
+    ak.macro_china_cpi.return_value = pd.DataFrame(
+        {"月份": ["2010年1月份"], "全国-同比增长": [1.5]}
+    )
+    ak.macro_china_pmi.return_value = pd.DataFrame({"月份": [], "制造业-同比增长": []})
+    ak.macro_china_shrzgm.return_value = pd.DataFrame(
+        {"月份": [], "社会融资规模增量": []}
+    )
+    assert MacroCollector(ak=ak).collect() == []

@@ -37,7 +37,7 @@
 | `app/factory.py` | **依赖组装唯一入口**：build_pipeline / build_ingest_components / build_monitor_store / build_monitor_runner。所有组件在此接线，UI/CLI 共用 |
 | `app/ui/webapp.py` | Streamlit 入口壳：`st.navigation` 双页（每页显式 url_path）。⚠️ 文件不能叫 app.py——会遮蔽 app 包 |
 | `app/ui/pages/advisor.py` | 【投研顾问】聊天 + 侧边栏上传入库 + 离线仓库概览卡片 |
-| `app/ui/pages/monitor.py` | 【市场监控】面板：立即采集（st.status 实时进度）/ 事件列表 / 一键入库 |
+| `app/ui/pages/monitor.py` | 【市场监控】面板：立即采集（st.status 实时进度）/「📈 指标趋势」折线图（宏观/行业，近1/3/5/10年）/ 事件列表（仅公告/要闻/美联储/会议 4 维度）/ 一键入库 |
 | `app/cli.py` | 终端 REPL 问答（`python -m app.cli`），运行时容错 + 缺 Key 友好提示 |
 
 ### 核心链路（一次提问的数据流）
@@ -70,10 +70,10 @@ cli.py / webapp.py → factory → pipeline/rag.py → retrieval/retriever.py �
 
 | 文件 | 职责 | 关键约束 |
 |---|---|---|
-| `app/monitor/models.py` | Dimension 六值枚举 / MonitorEvent / CollectReport | 新维度先扩枚举 |
-| `app/monitor/store.py` | SQLite：events 表（hash 去重）+ collect_state 水位线 + purge_before 过时清理 | 水位线只在采集成功后推进 |
+| `app/monitor/models.py` | Dimension 六值枚举 / MonitorEvent（含 `value` 指标数值）/ CollectReport | 新维度先扩枚举；事件类 value=None |
+| `app/monitor/store.py` | SQLite：events 表（hash 去重、value 列 ALTER 迁移）+ collect_state 水位线 + purge_before 过时清理 + purge_empty_url 存量清理 | 水位线只在采集成功后推进；改 hash 算法会使存量失效，禁止 |
 | `app/monitor/collectors/base.py` | Collector Protocol（`collect(since=...)`）+ AkshareCollector 基类（超时保护/日期解析） | 超时默认 60s；naive 时间按北京时间转 UTC |
-| `app/monitor/collectors/*.py` | 6 个采集器（公告增量窗口；新闻东财主源+新浪 fallback、20s 独立超时；全维度事件带来源链接） | 单源异常降级空结果，不抛出 |
+| `app/monitor/collectors/*.py` | 6 个采集器（公告增量窗口；新闻东财主源+新浪 fallback、20s 独立超时；宏观/行业拉近10年历史序列带 value；美联储正文含公布/预期/前值/重要性；全维度带来源链接） | 单源异常降级空结果，不抛出 |
 | `app/monitor/runner.py` | 线程池并行执行，on_report 完成即报，返回保持注入顺序 | 入库/水位线在主线程 |
 | `scripts/probe_collectors.py` | 真实接口采集探针（冒烟/排查列名用） | 直连 akshare，会联网 |
 

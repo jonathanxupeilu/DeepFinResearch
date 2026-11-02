@@ -187,3 +187,8 @@ UI 不做自动化测试（Streamlit 特性），语法校验 + 手动冒烟。
    - **思路**：探针实测三源——cls 挂起、东财 `stock_info_global_em` 返回 200 条且自带单条原文 URL、新浪 20 条无链接。选东财为主源（数据多 + 带链接，一举解决恒 0 与链接两问题），新浪作 fallback 保鲁棒；无单条链接的维度（宏观/美联储/行业/会议）填官方数据源页作参考链接。
    - **优化后**：每日要闻实测 200 条带链接；全维度事件 url 非空，UI 文案统一「来源链接」。
    - **最新设计**：`news.py` 内 `_collect_em()`/`_collect_sina()` 双源，em 空/失败降级 sina；sina 无标题列取内容前 40 字作标题、链接用新浪首页。各维度 url 来源见 §5「事件来源链接」表。
+7. **指标类改折线图展示 + 存量重复清理 + 美联储正文补全**（2026-11-02）：
+   - **优化前**：宏观/行业每次采集只存最新一期单事件，混在事件列表（维度筛选）里，无历史、无图表；来源链接上线使存量旧记录（url 空）与新记录 content_hash 不同共存，出现同名重复；美联储事件 content 为空显示"无内容"。
+   - **思路**：指标类本质是时间序列，事件列表不适合 → 移出维度筛选，改主页折线图 + 历史期间（1/3/5/10 年）；采集器改存近 10 年多期事件（`MonitorEvent.value` 结构化数值 + `published_at` 时间轴），复用 events 表 + content_hash 去重，不新建序列表（最小改动）；重复用 `purge_empty_url()` 清理无链接旧版本（不改 hash 算法，避免存量 hash 全失效）；美联储正文组合接口公布/预期/前值/重要性列。
+   - **优化后**：主页默认 5 条指标折线（PMI/CPI/社融/黄金/BDI）带期间切换；维度筛选与计数卡片只留事件类四维；存量重复采集后自动清理；美联储事件有正文与来源链接。
+   - **最新设计**：`MonitorEvent.value: float|None`（指标数值，事件类为 None）；events 表加 `value REAL` 列（存量库 `ALTER TABLE` 迁移）；macro/industry 存近 10 年序列（`_MAX_HISTORY_YEARS=10` 控膨胀）；macro 中文年月"2026年09月份"自定义解析 `_parse_month`；UI `_show_series_charts()` 按 title 分组画 `st.line_chart`，期间 selectbox 过滤 `published_at >= now - period`。
