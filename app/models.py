@@ -1,5 +1,7 @@
 # app/models.py
 import hashlib
+from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -55,3 +57,18 @@ class RagAnswer(BaseModel):
     answer: str
     citations: list[Citation] = Field(default_factory=list)
     trace: list[TraceStep] = Field(default_factory=list)
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatSession(BaseModel):
+    """一轮完整对话（问答序列），历史对话面板的存储单元。"""
+
+    id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    messages: list[ChatMessage] = Field(default_factory=list)

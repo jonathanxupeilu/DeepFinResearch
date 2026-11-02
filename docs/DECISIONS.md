@@ -163,6 +163,17 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 
 # 变更记录（原 CHANGELOG.md 内容并入）
 
+## [Unreleased]（2026-11-02 · 历史对话面板）
+
+### Added
+- **历史对话面板**：advisor 页右上折叠区（默认收起只露标题），展开列出历史
+  会话（标题=首问截断+更新时间提示），点击载入该轮问答续聊；「➕ 新对话」
+  清空当前上下文；每轮问答完成自动归档（`app/ui/views/advisor.py`）
+- **ChatStore**（`app/chat_store.py`）：JSON 单文件会话持久化（同 id upsert、
+  按 updated_at 倒序、tmp+replace 原子写）；`ChatMessage/ChatSession` 模型入
+  `app/models.py`；config 新增 `chat_history_path`（data/chat_history.json）
+- 测试：store 6 例 + AppTest 页面保存/新对话/续聊 3 例（220 通过）
+
 ## [Unreleased]（2026-11-02 · 三期修订四：/advisor 直达路由修复）
 
 ### Fixed

@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 # streamlit run 会把本文件所在目录插到 sys.path 前面，
 # 显式把项目根放到最前，保证本模块被独立导入时也可解析 app 包
@@ -8,10 +9,11 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 import streamlit as st
 
+from app.chat_store import ChatStore
 from app.config import get_settings
 from app.factory import build_agent_pipeline, build_ingest_components
 from app.ingest.loaders import load_file
-from app.models import Document, RagAnswer
+from app.models import ChatMessage, Document, RagAnswer
 from app.retrieval.stats import build_library_stats
 from app.retrieval.store import VectorStore
 
@@ -35,6 +37,12 @@ def get_pipeline():
 def get_vector_store() -> VectorStore:
     """会话间复用向量库连接（只读统计用途）。"""
     return VectorStore(persist_dir=get_settings().chroma_dir)
+
+
+@st.cache_resource
+def get_chat_store() -> ChatStore:
+    """会话间复用历史对话存储（JSON 单文件）。"""
+    return ChatStore(get_settings().chat_history_path)
 
 
 def _show_library_card() -> None:
@@ -63,12 +71,51 @@ def _show_library_card() -> None:
             st.caption(f"🆕 最新入库：《{stats.latest_title}》{when}")
 
 
+def _render_history_panel() -> None:
+    """页面右上「历史对话」：默认收起只露标题，展开后列出会话，点击载入续聊。"""
+    with st.expander("🕘 历史对话", expanded=False):
+        if st.button("➕ 新对话", key="chat_new", use_container_width=True):
+            st.session_state.messages = []
+            st.session_state.pop("chat_session_id", None)
+            st.rerun()
+        sessions = get_chat_store().list_sessions()
+        if not sessions:
+            st.caption("暂无历史对话，完成一轮问答后自动归档到这里。")
+        for session in sessions:
+            when = session.updated_at.astimezone().strftime("%m-%d %H:%M")
+            if st.button(
+                session.title or "（空对话）",
+                key=f"chat_resume_{session.id}",
+                use_container_width=True,
+                help=f"更新于 {when} · {len(session.messages)} 条消息",
+            ):
+                st.session_state.messages = [m.model_dump() for m in session.messages]
+                st.session_state.chat_session_id = session.id
+                st.rerun()
+
+
+def _persist_history() -> None:
+    """把当前 session_state 的问答序列写入历史对话存储（续聊时沿用同一会话 id）。"""
+    messages = [
+        ChatMessage(role=m["role"], content=m["content"])
+        for m in st.session_state.messages
+    ]
+    if not any(m.role == "user" for m in messages):
+        return
+    session_id = st.session_state.setdefault("chat_session_id", uuid4().hex)
+    get_chat_store().upsert_messages(session_id, messages)
+
+
 def render() -> None:
     st.set_page_config(page_title="DeepFinResearch", page_icon="⚙️")
     st.title("⚙️ DeepFinResearch · 本地知识库问答")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
+
+    _spacer, history_col = st.columns([3, 1])
+    with history_col:
+        _render_history_panel()
 
     # 先处理入库再渲染概览卡片：入库写入 Chroma 后，卡片的存量文章/切片数才能同步刷新
     with st.sidebar:
@@ -136,3 +183,4 @@ def render() -> None:
                 st.session_state.messages.append(
                     {"role": "assistant", "content": result.answer}
                 )
+                _persist_history()

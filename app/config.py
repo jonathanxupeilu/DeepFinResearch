@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     chroma_dir: Path = Path("data/chroma")
     knowledge_dir: Path = Path("knowledge")
     monitor_db_path: Path = Path("data/monitor.db")
+    chat_history_path: Path = Path("data/chat_history.json")
     # 三期 Agent：Tavily 空 Key = 不注册 web_search，Agent 降级为纯知识库检索
     tavily_api_key: str = ""
     agent_max_iterations: int = 5
