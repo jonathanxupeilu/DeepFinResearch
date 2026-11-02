@@ -103,10 +103,11 @@ docs/plans/        # 设计与实施计划
 - **与一期衔接**：监控事件可一键入库知识库（复用 indexer），投研顾问对话时可引用监控事件
 - **容错**：单数据源失败不影响整体，采集结果带时间戳与来源标记
 
-## 7. 三期展望（仅记录，不实现）
+## 7. 三期展望（✅ 已实施，2026-11-02）
 
 - 工具调用：LLM client 抽象层支持 function calling；首批工具=联网搜索（Tavily，`TAVILY_API_KEY` 已在密钥清单）
 - ReAct 循环：pipeline 层实现「思考→行动→观察」状态机，工具注册表 + 最大迭代数熔断
+- **实施修订**：采用 DeepSeek 原生 function calling（非文本协议）；新增 `AgentPipeline` 与 `RAGPipeline` 并存；实际设计见 `2026-11-02-agent-react-design.md`，决策见 DECISIONS D014
 
 ## 8. 四期展望（仅记录，不实现）
 

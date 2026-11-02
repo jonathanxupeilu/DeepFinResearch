@@ -4,7 +4,7 @@
 
 ## 项目是什么
 
-本地知识库 RAG 投研问答助手，六期路线图演进为多 Agent 投研平台。当前状态：**一、二期已完成**（151 unit/integration 测试绿 + e2e 冒烟）。
+本地知识库 RAG 投研问答助手，六期路线图演进为多 Agent 投研平台。当前状态：**一至三期已完成**（207 unit/integration 测试绿 + e2e 冒烟含真实 function calling 链路）。
 
 ## 路线图（v2，六期）
 
@@ -12,7 +12,7 @@
 |---|---|---|
 | 一期 | 本地 RAG 问答（入库→检索→prompt→LLM 带引用）+ Streamlit/CLI | ✅ 完成 |
 | 二期 | 市场监控面板（公告/要闻/宏观/美联储/会议/行业 6 维度），左菜单双页导航 | ✅ 完成 |
-| 三期 | 工具调用 + ReAct 自主决策（取代一期闲聊正则分流） | 未启动 |
+| 三期 | 工具调用 + ReAct 自主决策（AgentPipeline，取代一期闲聊正则分流） | ✅ 完成 |
 | 四期 | 记忆与上下文管理（短期/长期，ContextBuilder） | 未启动 |
 | 五期 | 多 Agent 编排（芒格/施洛斯/巴菲特/邓普顿/马克斯五种投资思维角色） | 未启动 |
 | 六期 | 财报/研报深度解读 + PTC 确定性财务计算（DCF/清算价值） | 未启动 |
@@ -25,7 +25,9 @@
 | `docs/plans/2026-10-29-local-rag-qa-phase1.md` | 一期实施计划：13 个 TDD 任务全文（含每个任务的测试与实现代码） | 改一期代码前对照原始规格；新任务参考其格式 |
 | `docs/plans/2026-10-30-market-monitor-design.md` | 二期设计：6 维度采集/存储/双页 UI（§11 为实施修订记录） | 改 monitor 相关代码前 |
 | `docs/plans/2026-10-30-market-monitor-phase2.md` | 二期实施计划：10 个 TDD 任务全文 | 改二期代码前对照原始规格 |
-| `docs/DECISIONS.md` | **决策日志**（D001-D010，只增不改）+ 变更记录 | 任何改动前先看有没有相关决策；做完改动要回写 |
+| `docs/plans/2026-11-02-agent-react-design.md` | 三期设计：工具层/ReAct 循环/证据编号/降级策略（§10 决策摘要） | 改 agent/tools/llm client 前 |
+| `docs/plans/2026-11-02-agent-react-phase3.md` | 三期实施计划：9 个 TDD 任务全文 | 改三期代码前对照原始规格 |
+| `docs/DECISIONS.md` | **决策日志**（D001-D014，只增不改）+ 变更记录 | 任何改动前先看有没有相关决策；做完改动要回写 |
 | `README.md` | 快速开始：安装、配置 .env、启动命令 | 环境搭建 |
 
 ## 代码索引
@@ -34,28 +36,36 @@
 
 | 文件 | 职责 |
 |---|---|
-| `app/factory.py` | **依赖组装唯一入口**：build_pipeline / build_ingest_components / build_monitor_store / build_monitor_runner。所有组件在此接线，UI/CLI 共用 |
+| `app/factory.py` | **依赖组装唯一入口**：build_pipeline / build_agent_pipeline / build_ingest_components / build_monitor_store / build_monitor_runner。所有组件在此接线，UI/CLI 共用 |
 | `app/ui/webapp.py` | Streamlit 入口壳：`st.navigation` 双页（每页显式 url_path）。⚠️ 文件不能叫 app.py——会遮蔽 app 包 |
-| `app/ui/pages/advisor.py` | 【投研顾问】聊天 + 侧边栏上传入库 + 离线仓库概览卡片 |
+| `app/ui/pages/advisor.py` | 【投研顾问】Agent 聊天（决策轨迹 expander + URL 引用链接）+ 侧边栏上传入库 + 离线仓库概览卡片 |
 | `app/ui/pages/monitor.py` | 【市场监控】面板：「📈 指标趋势」折线图顶部默认展示（双列、近1/3/5/10年、最新值标注）/ 立即采集（st.status 实时进度）/ 事件列表（仅公告/要闻/美联储/会议 4 维度）/ 一键入库 |
-| `app/cli.py` | 终端 REPL 问答（`python -m app.cli`），运行时容错 + 缺 Key 友好提示 |
+| `app/cli.py` | 终端 REPL 问答（`python -m app.cli`，走 AgentPipeline，打印决策轨迹），运行时容错 + 缺 Key 友好提示 |
 
 ### 核心链路（一次提问的数据流）
 
 ```
-cli.py / webapp.py → factory → pipeline/rag.py → retrieval/retriever.py → retrieval/store.py (Chroma)
-                                        ↓ prompt 组装（唯一收口）
-                                  llm/client.py (DeepSeek)
+cli.py / webapp.py → factory ─→ pipeline/agent.py（三期默认入口，ReAct 循环）
+                                │    ↓ tools/ 工具注册表（knowledge_search→retriever；web_search→Tavily）
+                                └─→ pipeline/rag.py（单轮 RAG 快速通道，e2e 基线）
+                                        ↓ prompt 组装（pipeline 包唯一收口）
+                                  llm/client.py (DeepSeek, chat / chat_with_tools)
 ```
 
 | 文件 | 职责 | 关键约束 |
 |---|---|---|
-| `app/pipeline/rag.py` | 检索→prompt→LLM→RagAnswer 带引用；空检索诚实拒答；闲聊分流 | **一期所有 prompt 组装收口于此**，三期 ReAct/五期多Agent 都在此扩展，不得旁路 |
-| `app/pipeline/prompts.py` | SYSTEM_PROMPT / USER_TEMPLATE / 拒答文案 / 闲聊正则 | 所有面向用户的文案常量放这里，不散落 |
+| `app/pipeline/agent.py` | 三期 AgentPipeline：function calling ReAct 循环、全局证据编号 [n]、未知工具/失败容错、max_iterations 熔断后强制终答 | 与 rag.py 并列为 prompt 收口；五期多 Agent 在此注入角色 system_prompt |
+| `app/pipeline/rag.py` | 检索→prompt→LLM→RagAnswer 带引用；空检索诚实拒答；闲聊分流 | 单轮快速通道（e2e 基线），Agent 入口已废除闲聊正则 |
+| `app/pipeline/prompts.py` | SYSTEM_PROMPT / AGENT_SYSTEM_PROMPT / USER_TEMPLATE / 拒答文案 / 闲聊正则 | 所有面向用户的文案常量放这里，不散落 |
+| `app/pipeline/citations.py` | 引用构建共享逻辑（按 [n] 标注过滤/越界忽略/无标注保留全部） | rag 与 agent 共用，改语义两处同时生效 |
+| `app/tools/base.py` | Tool Protocol + ToolSpec/ToolResult/Evidence（Pydantic） | 工具内部 catch 全部异常降级失败文本；Evidence 不编号，编号归循环层 |
+| `app/tools/registry.py` | ToolRegistry：注册（重名拒绝）/get/openai_tools() | 新工具 = 一个类 + factory 注册一行 |
+| `app/tools/knowledge_search.py` | 包装一期 Retriever 的知识库检索工具 | query 必填，检索空/异常均降级观察文本 |
+| `app/tools/web_search.py` | Tavily REST 联网搜索（httpx，Bearer 鉴权，15s 超时） | 空 Key 构造即拒绝；factory 只在有 Key 时注册 |
 | `app/retrieval/retriever.py` | top-k 检索 + cosine 相似度阈值过滤 | score = 1 - cosine_dist，collection 必须是 cosine 空间 |
 | `app/retrieval/store.py` | Chroma 封装（upsert/query/delete/按 source 管理/get_all_metadatas） | 创建集合须带 `metadata={"hnsw:space": "cosine"}` |
 | `app/retrieval/stats.py` | 离线仓库统计（纯函数）：文章数/分类/最新入库；分类=monitor前缀→市场监控>目录前缀>上传文档 | 只聚合不查库；缺 indexed_at 的旧数据兜底 |
-| `app/llm/client.py` | LLMClient Protocol + DeepSeekClient | 走接口抽象，三期 ReAct 换实现不改上层 |
+| `app/llm/client.py` | LLMClient Protocol + DeepSeekClient：chat / chat_with_tools（ToolCall/ChatResponse） | 走接口抽象；工具参数非法 JSON 降级空参；重试仅限限流/连接类 |
 | `app/llm/embedding.py` | DashScope embedding（分批 10 条/重试/截断） | 重试仅限 RateLimitError/APIConnectionError + reraise=True |
 
 ### 入库链路（上传文档的数据流）
@@ -81,16 +91,17 @@ cli.py / webapp.py → factory → pipeline/rag.py → retrieval/retriever.py �
 
 | 文件 | 职责 |
 |---|---|
-| `app/config.py` | Pydantic Settings 读 .env（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY 及全部可调参数） |
-| `app/models.py` | Pydantic v2 模型：Document/Chunk/RetrievedChunk/Citation/RagAnswer——**禁裸 dict 传核心业务数据** |
+| `app/config.py` | Pydantic Settings 读 .env（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY 必填；TAVILY_API_KEY 可选=空则不注册 web_search；agent_max_iterations 等全部可调参数） |
+| `app/models.py` | Pydantic v2 模型：Document/Chunk/RetrievedChunk/Citation/TraceStep/RagAnswer（含 trace）——**禁裸 dict 传核心业务数据** |
 
 ## 测试索引
 
 | 目录 | 覆盖 | 依赖 |
 |---|---|---|
-| `tests/unit/` | 一期（config/models/splitter/loaders/embedding/llm_client/rag_pipeline/factory/cli）+ 二期（monitor 模型/runner 并行容错/各采集器/stats） | 无网络、无 Key |
+| `tests/unit/` | 一期（config/models/splitter/loaders/embedding/llm_client/rag_pipeline/factory/cli）+ 二期（monitor 模型/runner 并行容错/各采集器/stats）+ 三期（citations/tool_registry/knowledge_search/web_search/agent_pipeline/advisor 页 AppTest） | 无网络、无 Key |
 | `tests/integration/` | store/retriever/indexer（真实 Chroma，tmp_path）+ monitor store（真实 SQLite） | 无 Key |
 | `tests/e2e/test_smoke.py` | 全链路入库→检索→问答（真实 API） | 需 .env 双 Key，无 Key 自动 skip |
+| `tests/e2e/test_agent_smoke.py` | Agent 真实链路：闲聊不调工具 / 知识库问题触发 knowledge_search（校准 DeepSeek function calling 格式） | 需 .env 双 Key，无 Key 自动 skip |
 
 ```bash
 # 常用命令（Windows, Git Bash）
@@ -109,3 +120,4 @@ cli.py / webapp.py → factory → pipeline/rag.py → retrieval/retriever.py �
 - 旧 backlog 三项已清（embedding 截断保护 / citations 精确解析 / st.cache_resource 已用于 pipeline 与 vector store）
 - 监控事件默认保留 30 天（`monitor.py` 的 `_RETENTION_DAYS`，宏观/行业序列豁免），公告增量窗口最长回补 7 天，宏观/行业增量回看 90 天
 - akshare 接口变动频繁：改采集器前先跑 `scripts/probe_collectors.py` 对真实接口验证列名
+- 联网搜索需在 `.env` 加 `TAVILY_API_KEY`（tavily.com 免费额度）；缺失不阻断启动，Agent 自动降级为纯知识库检索

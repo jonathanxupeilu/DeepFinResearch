@@ -106,9 +106,42 @@ D012 的折线图上线后用户追加两点：指标应页面默认展示、「
 
 另修复 industry 采集器未走基类 `_fetch_or_none` 的超时保护缺口。设计细节见设计文档 §11-8。
 
+## D014 · 三期 ReAct 采用原生 function calling + AgentPipeline 并存（2026-11-02）
+
+三期实施的关键取舍（设计文档 `docs/plans/2026-11-02-agent-react-design.md`）：
+
+1. **原生 function calling 而非文本协议 ReAct**：DeepSeek 官方支持 `tools` 参数（e2e 实测通过），JSON 结构化远比解析 "Action:/Observation:" 文本鲁棒；"思考"过程由决策轨迹（工具调用序列）显式呈现，不要求 LLM 输出 Thought 文本。
+2. **AgentPipeline 新增而非改写 RAGPipeline**：单轮 RAG 是 Agent 的退化形态且有独立价值（快、省 token、e2e 基线）；一期"rag.py 唯一收口"约束升级为"**pipeline 包**唯一收口"（rag.py 单轮 + agent.py 循环，prompts/citations 共享）。
+3. **证据编号全局分配**：跨工具跨轮次统一 [n] 由循环层分配（工具返回未编号 Evidence），保证终答引用与 citations 一一对应；闲聊正则分流在 Agent 入口废除（LLM 自主决定不调工具），rag.py 通道保留。
+4. **Tavily 无 Key 静默降级**：`tavily_api_key` 默认空，factory 只在有 Key 时注册 web_search，Agent 能力随配置伸缩、不阻断启动。工具层异常一律降级为失败观察文本，循环不崩。
+5. **熔断**：`agent_max_iterations=5`，耗尽后最后一轮不给工具强制终答。
+
 ---
 
 # 变更记录（原 CHANGELOG.md 内容并入）
+
+## [Unreleased]（2026-11-02 · 三期：工具调用 + ReAct 自主决策）
+
+### Added
+- **工具层** `app/tools/`：Tool Protocol/ToolSpec/ToolResult/Evidence 基座 +
+  ToolRegistry（重名拒绝、openai_tools() 描述输出）；knowledge_search（包装一期
+  Retriever）、web_search（Tavily REST，httpx，异常降级、空 Key 拒构造）
+- **LLM function calling**：`chat_with_tools` + ToolCall/ChatResponse（Pydantic），
+  参数非法 JSON 降级空参，沿用 tenacity 重试（`app/llm/client.py`）
+- **AgentPipeline**（`app/pipeline/agent.py`）：ReAct 循环、全局证据编号 [n]、
+  未知工具/工具失败容错、max_iterations 熔断后强制终答；AGENT_SYSTEM_PROMPT
+- **决策轨迹**：`TraceStep` 模型 + `RagAnswer.trace`；advisor 页「🧠 决策轨迹」
+  expander + URL 引用渲染为链接；CLI 轨迹逐行打印
+- **共享引用构建** `app/pipeline/citations.py`（rag/agent 共用）；
+  `build_agent_pipeline()` factory 入口；config 新增 tavily_api_key /
+  agent_max_iterations / tavily_max_results；pyproject 显式声明 httpx
+- 测试：工具层/LLM 映射/Agent 循环 6 场景/factory 降级注册/advisor AppTest/
+  CLI 轨迹（unit+integration 207 通过）+ e2e 真实 DeepSeek 冒烟 2 例
+
+### Changed
+- **advisor 页与 CLI 入口切换到 AgentPipeline**：投研顾问由单轮 RAG 升级为
+  自主工具决策；RAGPipeline 保留为单轮快速通道（e2e 基线不动）
+- Agent 入口废除闲聊正则分流（D005 治标方案退役，LLM 自主决定不调工具）
 
 ## [Unreleased]（2026-11-02 · 市场监控：指标排版优化与采集增量化）
 
