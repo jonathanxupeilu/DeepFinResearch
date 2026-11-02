@@ -38,7 +38,7 @@
 |---|---|
 | `app/factory.py` | **依赖组装唯一入口**：build_pipeline / build_agent_pipeline / build_ingest_components / build_monitor_store / build_monitor_runner。所有组件在此接线，UI/CLI 共用 |
 | `app/ui/webapp.py` | Streamlit 入口壳：`st.navigation` 双页（每页显式 url_path）+ 隐藏别名页保住 /advisor 直达路由。⚠️ 文件不能叫 app.py——会遮蔽 app 包；⚠️ 页面目录必须叫 `views/` 不能叫 `pages/`——pages/ 是 Streamlit 魔法目录，冷启动直达 URL 会绕过 st.navigation 落到目录多页 fallback（空白页） |
-| `app/ui/views/advisor.py` | 【投研顾问】Agent 聊天（决策轨迹 expander + URL 引用链接）+ 右上「历史对话」折叠面板（会话归档/点击续聊/新对话）+ 侧边栏上传入库 + 离线仓库概览卡片 |
+| `app/ui/views/advisor.py` | 【投研顾问】Agent 聊天（决策轨迹 expander + URL 引用链接）+ 右上「历史对话」折叠面板（与概览卡片同行、会话归档/点击续聊）+ 侧边栏上传入库 + 离线仓库概览卡片 |
 | `app/ui/views/monitor.py` | 【市场监控】面板：「📈 指标趋势」折线图顶部默认展示（双列、近1/3/5/10年、最新值标注）/ 立即采集（st.status 实时进度）/ 事件列表（仅公告/要闻/美联储/会议 4 维度）/ 一键入库 |
 | `app/cli.py` | 终端 REPL 问答（`python -m app.cli`，走 AgentPipeline，打印决策轨迹），运行时容错 + 缺 Key 友好提示 |
 

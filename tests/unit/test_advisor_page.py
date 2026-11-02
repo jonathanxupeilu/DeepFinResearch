@@ -75,7 +75,7 @@ def test_advisor_history_saved_and_resumable(tmp_path, monkeypatch):
     at = _make_at(tmp_path, monkeypatch)
     at.run()
     assert not at.exception
-    assert any(b.label == "➕ 新对话" for b in at.button)  # 历史对话面板存在
+    assert not at.button  # 无历史会话时面板只有空态文案
 
     at.chat_input[0].set_value("什么是护城河？").run()
     assert not at.exception
@@ -84,9 +84,9 @@ def test_advisor_history_saved_and_resumable(tmp_path, monkeypatch):
     assert sessions[0].title == "什么是护城河？"
     assert [m.role for m in sessions[0].messages] == ["user", "assistant"]
 
-    next(b for b in at.button if b.label == "➕ 新对话").click().run()
+    at.session_state.messages = []  # 模拟切到空白上下文
+    at.run()
     assert not at.exception
-    assert not at.session_state.messages  # 新对话清空当前上下文
 
     next(b for b in at.button if b.label == "什么是护城河？").click().run()
     assert not at.exception

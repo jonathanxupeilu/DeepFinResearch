@@ -23,6 +23,8 @@ _TOOL_LABELS = {
     "current_time": "🕐 当前时间",
 }
 
+_HISTORY_LIMIT = 10  # 面板只列最近会话，避免长列表把聊天区顶出视口
+
 
 @st.cache_resource
 def get_pipeline():
@@ -72,13 +74,9 @@ def _show_library_card() -> None:
 
 
 def _render_history_panel() -> None:
-    """页面右上「历史对话」：默认收起只露标题，展开后列出会话，点击载入续聊。"""
+    """页面右上「历史对话」：默认收起只露标题，展开列出近期会话，点击载入续聊。"""
     with st.expander("🕘 历史对话", expanded=False):
-        if st.button("➕ 新对话", key="chat_new", use_container_width=True):
-            st.session_state.messages = []
-            st.session_state.pop("chat_session_id", None)
-            st.rerun()
-        sessions = get_chat_store().list_sessions()
+        sessions = get_chat_store().list_sessions()[:_HISTORY_LIMIT]
         if not sessions:
             st.caption("暂无历史对话，完成一轮问答后自动归档到这里。")
         for session in sessions:
@@ -113,7 +111,8 @@ def render() -> None:
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    _spacer, history_col = st.columns([3, 1])
+    # 概览卡片与历史面板同行：面板展开只撑高右列，不会把卡片顶下去
+    card_col, history_col = st.columns([4, 1])
     with history_col:
         _render_history_panel()
 
@@ -139,7 +138,8 @@ def render() -> None:
             except (ValueError, OSError, UnicodeDecodeError) as e:
                 st.error(f"入库失败: {e}")
 
-    _show_library_card()
+    with card_col:
+        _show_library_card()
 
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
