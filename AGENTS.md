@@ -27,7 +27,7 @@
 | `docs/plans/2026-10-30-market-monitor-phase2.md` | 二期实施计划：10 个 TDD 任务全文 | 改二期代码前对照原始规格 |
 | `docs/plans/2026-11-02-agent-react-design.md` | 三期设计：工具层/ReAct 循环/证据编号/降级策略（§10 决策摘要） | 改 agent/tools/llm client 前 |
 | `docs/plans/2026-11-02-agent-react-phase3.md` | 三期实施计划：9 个 TDD 任务全文 | 改三期代码前对照原始规格 |
-| `docs/DECISIONS.md` | **决策日志**（D001-D014，只增不改）+ 变更记录 | 任何改动前先看有没有相关决策；做完改动要回写 |
+| `docs/DECISIONS.md` | **决策日志**（D001-D017，只增不改）+ **踩坑记录**（唯一记录处，D017）+ 变更记录 | 任何改动前先看有没有相关决策；做完改动/踩坑要回写 |
 | `README.md` | 快速开始：安装、配置 .env、启动命令 | 环境搭建 |
 
 ## 代码索引
