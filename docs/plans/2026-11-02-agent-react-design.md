@@ -191,3 +191,13 @@ tavily_max_results: int = 5
 3. 提示词新增规则 11：追问/补充维度必须结合原话题理解，检索 query 与回答不得丢失主题词
 
 **取舍**：历史只传问答终稿文本、不传工具调用明细，上下文简洁；条数与长度双上限控制 token 成本。
+
+## 15. 实施修订四（2026-11-03 · prompt 收口迁移 prompts.yaml + Agent 逐步思考）
+
+**背景**：① 全部提示词散在 `prompts.py` Python 常量里，prompt engineering 调优要改代码、难复用；② 用户要求 ReAct 循环的 Thought/决策阶段引导 Agent 逐步思考。
+
+**优化后**：
+1. **提示词统一维护于 `app/pipeline/prompts.yaml`**：rag（system/user_template/拒答/闲聊回复）、agent（system）、tools（三工具 description）三组文案迁出 Python；`prompts.py` 降级为加载器（读 yaml 暴露同名常量），工具/rag/agent 接口零改动；闲聊正则与 `is_smalltalk` 属程序逻辑留在 prompts.py。依赖显式声明 `pyyaml>=6.0`（此前为传递依赖）
+2. **`AGENT_SYSTEM_PROMPT` 新增规则 12（逐步思考 step by step）**：复杂问题拆小步骤一次解决一步；每轮调工具前先想清楚「缺什么信息 → 用哪个工具 → 用什么关键词」，拿到观察后判断证据是否足够，不够继续下一步、够了才作答，禁止一步跳到结论
+
+**取舍**：function calling 无显式 Thought 文本（D014），"逐步思考"落在系统提示词对每轮工具决策的引导上，不新增消息角色、不改循环结构。prompt 收口从"pipeline 包"细化为"prompts.yaml 单一来源 + prompts.py 加载"。

@@ -144,6 +144,12 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 
 # 踩坑记录（工程陷阱与优化演进，只增不改）
 
+## 2026-11-03 · 宏观指标扩容与社融同比自算
+
+- GDP「国内生产总值-绝对值」是年初至今**累计值**非单季：`单季k = 累计k - 累计(k-1)`、Q1 单季 = 累计1；季度标签实为 `2026年第1-3季度`（含「第」，GBK 控制台乱码看不出），regex 须 `(\d{4})年第?(\d)(?:-(\d))?季度`
+- akshare `macro_china_shrzgm` 仍走废弃 http 端点（405 报错页）→ 改直连 https（键 `date`=月份、`tiosfs`=增量）
+- 社融增量同比自算须跳过上年同月 ≤0 的月份（2024-04 = -658 亿首次负值，照算会荒谬放大）
+
 ## 2026-11-02 · 三期（ReAct/工具调用）当日
 
 **回答质量优化演进**（用户实测驱动，决策详情见 D015/D016）：
@@ -163,6 +169,41 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 ---
 
 # 变更记录（原 CHANGELOG.md 内容并入）
+
+## [Unreleased]（2026-11-03 · prompt 收口迁移 prompts.yaml + Agent 逐步思考）
+
+### Changed
+- **全项目提示词统一维护于 `app/pipeline/prompts.yaml`**：rag（system/user_template/
+  拒答/闲聊回复）、agent（system）、tools（三个工具 description）三组文案全部迁出
+  Python 常量；`prompts.py` 降级为加载器，读 yaml 暴露同名常量（工具/rag/agent
+  零改动，接口不变），闲聊正则与 `is_smalltalk` 属程序逻辑保留在 prompts.py
+  - 动机：日后 prompt engineering 调优只改 yaml，可 diff、可版本管理、跨期复用
+  - 新增依赖 `pyyaml>=6.0`（此前为传递依赖，显式声明）
+  - 新增 `tests/unit/test_prompts.py`：校验 yaml 三组结构、常量与 yaml 源一致非空、
+    模板占位符完整
+- **AGENT_SYSTEM_PROMPT 新增规则 12（逐步思考 step by step）**：复杂问题拆小步骤
+  一次解决一步；每轮调用工具前先想清楚「缺什么信息 → 用哪个工具 → 用什么关键词」，
+  拿到观察后判断证据是否足够，不够继续下一步、够了才作答，禁止一步跳到结论
+  - 落在 Thought/决策阶段的提示词引导（function calling 无显式 Thought 文本，D014）
+
+## [Unreleased]（2026-11-03 · 市场监控：宏观指标扩容与侧边栏分类选项卡）
+
+### Changed
+- **宏观指标 3→9 序列**：PMI 改取「制造业-指数」；CPI/M2 各补环比；GDP 同比现成列 +
+  环比自算（累计转单季）；社融增量 + 同比自算（当月/上年同月−1）
+  （`app/monitor/collectors/macro.py`）
+- **指标分类 + 卡内切换**：主内容区左侧「宏观经济指标（默认）/ 大宗商品指标」单选；
+  同一指标多口径合并一张卡、卡内 `segmented_control` 切换（`app/ui/views/monitor.py`）
+- 测试：MacroCollector 12 例（228 通过）
+
+### Fixed
+- **GDP/社融「暂无数据」**：GDP 标签实含「第」（regex `年第?`）；社融改直连 mofcom
+  https 端点（`macro_china_shrzgm` 旧 http 端点 405 废弃）
+- **面板左右过空**：`layout="wide"` + 指标分类/图表列宽 1:5
+
+### 数据口径备注
+- GDP 环比为未经季节调整的原始季度环比（累计转单季后相邻相除），非统计局季调口径
+- 社融同比为「当月/上年同月−1」自算比率，非官方「同比多增 X 亿元」绝对差额
 
 ## [Unreleased]（2026-11-02 · 三期修订五：多轮对话上下文）
 

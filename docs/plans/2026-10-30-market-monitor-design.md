@@ -198,3 +198,6 @@ UI 不做自动化测试（Streamlit 特性），语法校验 + 手动冒烟。
    - **思路**：指标趋势区上移至页面顶部（默认展示，无需先采集）；排版改双列网格，期间选择器与标题同行，每图带「最新值（日期）」标注；采集器尊重 `since` 水位线做增量——只保留 `since - 90 天` 回看窗口内的数据点（覆盖月度发布滞后/修订，重叠由 content_hash 去重），首次仍全量 10 年；指标类维度退出 30 天清理（`purge_before(exclude=...)`），序列长期保留。
    - **优化后**：进页面即见 5 图双列趋势 + 最新值；「立即采集」对指标只入库新数据点，速度稳定；历史序列不再被过时清理误删。
    - **最新设计**：`MacroCollector`/`IndustryCollector` 的 `collect(since)` 生效（`_SINCE_LOOKBACK_DAYS=90`，cutoff = max(10年前, since-90天)）；`EventStore.purge_before(days, exclude)` 支持维度豁免；industry 改走 `_fetch_or_none`（超时保护对齐基类）；UI `_show_series_charts()` 双列 `st.columns(2)` 布局。
+9. **宏观指标扩容 + 指标分类选项卡**（2026-11-03）：
+   - 主页默认展示 GDP/CPI/M2 增长率（同比环比）+ PMI + 社融增量，黄金/BDI 归「大宗商品指标」；`MacroCollector` 由 3 序列扩为 9 序列（PMI 取「制造业-指数」、CPI/M2 补环比、GDP 环比累计转单季自算、社融增量 + 同比「当月/上年同月−1」自算）；社融接口改直连 mofcom https（akshare 旧 http 端点 405）；指标分类单选入主内容区左侧，多口径合并一张卡卡内 `segmented_control` 切换，页面 `layout="wide"`。
+   - 踩坑与口径详见 DECISIONS.md「2026-11-03 · 宏观指标扩容与社融同比自算」。

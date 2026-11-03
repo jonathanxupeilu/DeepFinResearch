@@ -1,41 +1,45 @@
+"""prompt 文案统一加载：所有提示词维护在 prompts.yaml，本文件只做加载与暴露常量。
+
+调优任何 prompt 只改 prompts.yaml（收口原则见 AGENTS.md）。闲聊正则与
+is_smalltalk 属程序逻辑，保留在本文件。
+"""
+
 import re
+from pathlib import Path
 
-SYSTEM_PROMPT = """你是一名严谨的投资研究助手。规则：
-1. 仅依据下方提供的【参考资料】回答问题，禁止使用资料之外的知识。
-2. 引用资料时在句末标注来源编号，如 [1]、[2]。
-3. 若资料不足以回答，明确说明"参考资料中未找到足够信息"，不要猜测。
-4. 回答使用简体中文，条理清晰。"""
+import yaml  # type: ignore[import-untyped]
 
-USER_TEMPLATE = """【参考资料】
-{context}
+_PROMPTS_PATH = Path(__file__).with_name("prompts.yaml")
 
-【问题】
-{question}"""
 
-NO_CONTEXT_ANSWER = "知识库中未找到与该问题相关的内容，请先入库相关文档或换一种问法。"
+def _load() -> dict:
+    with _PROMPTS_PATH.open("r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
 
-SMALLTALK_ANSWER = "你好！我是投研助手，请直接提出你的问题，我会依据知识库资料作答。"
 
-# 三期 Agent 系统提示词：工具决策规则 + 证据引用约定（agent.py 唯一使用方；
-# 当前时间不写死注入，由 Agent 自主调用 current_time 工具获取，见 D016）
-AGENT_SYSTEM_PROMPT = """你是一名严谨的投资研究助手 Agent，可以调用工具查证信息。规则：
-1. 涉及事实、数据或资料内容的问题，必须先调用工具查证，禁止仅凭记忆作答。
-2. 打招呼、感谢等闲聊直接回复，不调用工具。
-3. 你没有当前时间的概念：问题含「最近/近期/最新/这周/今天」等时间词时，
-   必须先调用 current_time 工具获取当前日期，把时间范围具体化。
-4. 时效性问题在获取当前时间后，第一轮先查证"发生了什么"的具体事实：时间区间、
-   方向（涨还是跌）、幅度、关键事件；之后再分析"为什么"。禁止跳过事实定位直接泛谈原因。
-5. 联网搜索的 query 必须带明确时间词（如「2026年11月」「近一周」，以 current_time
-   结果为准），查近期行情时优先给 web_search 传 time_range 参数（week/month）收缩结果时间。
-6. 可以多轮调用工具：先查知识库获取分析框架与背景，最新行情与事件必须联网搜索补充。
-7. 最终回答只依据工具观察中带编号的证据，引用时在句末标注编号，如 [1]、[2]。
-8. 涉及行情的回答，先用一段说明「什么时间区间内、涨还是跌、幅度多大」，再展开原因分析。
-9. 证据不足以回答时，明确说明"未找到足够信息"，不要编造。
-10. 回答使用简体中文，条理清晰。
-11. 对话存在历史上下文时，追问或补充维度必须结合原话题（板块/标的/议题）理解：
-    检索 query 与回答都不得丢失主题词，禁止只按补充内容本身去搜索或作答。"""
+_DATA = _load()
+_RAG = _DATA["rag"]
+_AGENT = _DATA["agent"]
+_TOOLS = _DATA["tools"]
 
-# 闲聊分流：完整匹配打招呼/感谢/告别类输入时跳过检索（三期 ReAct 将以 Agent 自主决策取代）
+# 单轮 RAG 通道（rag.py）
+SYSTEM_PROMPT: str = _RAG["system"]
+USER_TEMPLATE: str = _RAG["user_template"]
+NO_CONTEXT_ANSWER: str = _RAG["no_context_answer"]
+SMALLTALK_ANSWER: str = _RAG["smalltalk_answer"]
+
+# Agent ReAct 通道（agent.py）
+AGENT_SYSTEM_PROMPT: str = _AGENT["system"]
+
+# 工具描述（LLM 决策依据，本质也是 prompt）
+KNOWLEDGE_SEARCH_DESCRIPTION: str = _TOOLS["knowledge_search"]["description"]
+KNOWLEDGE_SEARCH_QUERY_DESCRIPTION: str = _TOOLS["knowledge_search"]["query"]
+WEB_SEARCH_DESCRIPTION: str = _TOOLS["web_search"]["description"]
+WEB_SEARCH_QUERY_DESCRIPTION: str = _TOOLS["web_search"]["query"]
+WEB_SEARCH_TIME_RANGE_DESCRIPTION: str = _TOOLS["web_search"]["time_range"]
+CURRENT_TIME_DESCRIPTION: str = _TOOLS["current_time"]["description"]
+
+# 闲聊分流：完整匹配打招呼/感谢/告别类输入时跳过检索（Agent 入口已废除，rag 快速通道沿用）
 _SMALLTALK_RE = re.compile(
     r"^(?:你好|您好|嗨|哈喽|hello|hi|在吗|在么|早上好|上午好|中午好|下午好|晚上好|早安|晚安|"
     r"谢谢|多谢|感谢|辛苦了|麻烦了|再见|拜拜|bye+)"
@@ -46,28 +50,3 @@ _SMALLTALK_RE = re.compile(
 
 def is_smalltalk(text: str) -> bool:
     return bool(_SMALLTALK_RE.match(text.strip()))
-
-
-# ---------------------------------------------------------------------------
-# 工具描述文案（LLM 决策依据，本质也是 prompt）：全部收口本文件，改工具话术不动工具代码
-# ---------------------------------------------------------------------------
-
-KNOWLEDGE_SEARCH_DESCRIPTION = (
-    "在本地投研知识库中语义检索资料。回答涉及知识库文档内容、"
-    "需要事实依据或引用时优先调用；query 用简体中文关键词或问句。"
-)
-KNOWLEDGE_SEARCH_QUERY_DESCRIPTION = "检索词（简体中文关键词或问句）"
-
-WEB_SEARCH_DESCRIPTION = (
-    "联网搜索最新市场资讯、新闻与知识库之外的信息。"
-    "需要时效性内容（近期事件、最新数据）或知识库检索不足时调用；query 用简体中文关键词。"
-)
-WEB_SEARCH_QUERY_DESCRIPTION = "搜索关键词（简体中文，时效性问题须带明确时间词）"
-WEB_SEARCH_TIME_RANGE_DESCRIPTION = (
-    "限定结果时间范围；查近期行情/新闻时用 week 或 month"
-)
-
-CURRENT_TIME_DESCRIPTION = (
-    "获取当前日期时间与星期（北京时间）。问题涉及「最近/近期/今天/本周」等"
-    "时间词，或联网搜索需要构造时间关键词时，先调用本工具确定当前时间基准。"
-)

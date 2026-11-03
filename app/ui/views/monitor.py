@@ -30,7 +30,26 @@ _EVENT_DIMS = [
     Dimension.POLICY,
 ]
 _SERIES_DIMS = [Dimension.MACRO, Dimension.INDUSTRY]
+# 侧边栏「指标分类」→ 展示维度：宏观经济指标默认，黄金/BDI 归大宗商品指标
+_CATEGORY_DIMS = {
+    "宏观经济指标": [Dimension.MACRO],
+    "大宗商品指标": [Dimension.INDUSTRY],
+}
 _PERIODS = {"近1年": 365, "近3年": 365 * 3, "近5年": 365 * 5, "近10年": 365 * 10}
+# 指标分组：同一指标多口径（同比/环比）合并为一张卡，卡内切换口径
+_INDICATOR_GROUPS: dict[Dimension, list[tuple[str, dict[str, str]]]] = {
+    Dimension.MACRO: [
+        ("GDP", {"同比": "GDP同比", "环比": "GDP环比"}),
+        ("CPI", {"同比": "CPI同比", "环比": "CPI环比"}),
+        ("M2", {"同比": "M2同比", "环比": "M2环比"}),
+        ("PMI", {"指数": "PMI"}),
+        ("社融增量", {"同比": "社融增量同比", "增量": "社融增量"}),
+    ],
+    Dimension.INDUSTRY: [
+        ("黄金", {"收盘价": "黄金"}),
+        ("BDI运价", {"运价": "BDI运价"}),
+    ],
+}
 
 
 def _show_holdings_hint() -> None:
@@ -55,8 +74,37 @@ def _show_metrics() -> None:
         col.metric(dim.value, counts.get(dim, 0))  # counts_by_dimension 不含 0 计数维度
 
 
-def _show_series_charts() -> None:
-    """指标趋势折线图：宏观/行业序列默认展示在主页，期间可选，双列排版。"""
+def _render_indicator_card(
+    name: str, variants: dict[str, str], series: dict[str, list[tuple[datetime, float]]]
+) -> None:
+    """渲染单张指标卡：多口径（同比/环比）卡内切换，单口径直接出图。"""
+    labels = list(variants)
+    if len(labels) > 1:
+        choice = (
+            st.segmented_control(
+                name, labels, default=labels[0], key=f"indicator_{name}"
+            )
+            or labels[0]
+        )
+    else:
+        choice = labels[0]
+        st.markdown(f"**{name}**")
+    title = variants[choice]
+    points = series.get(title, [])
+    if not points:
+        st.caption(f"{name}：暂无数据")
+        return
+    df = (
+        pd.DataFrame(sorted(points, key=lambda p: p[0]), columns=["date", "value"])
+        .groupby("date")
+        .last()
+    )
+    st.caption(f"最新 {df['value'].iloc[-1]:,.2f}（{df.index[-1]:%Y-%m-%d}）")
+    st.line_chart(df["value"])
+
+
+def _show_series_charts(dims: list[Dimension]) -> None:
+    """指标趋势折线图：按指标分类维度展示，同一指标多口径卡内切换，双列排版。"""
     head_col, period_col = st.columns([4, 1])
     with head_col:
         st.subheader("📈 指标趋势")
@@ -65,9 +113,7 @@ def _show_series_charts() -> None:
     cutoff = datetime.now(timezone.utc) - timedelta(days=_PERIODS[period])
     try:
         with build_monitor_store() as store:
-            events = [
-                e for dim in _SERIES_DIMS for e in store.list_events(dim, limit=10000)
-            ]
+            events = [e for dim in dims for e in store.list_events(dim, limit=10000)]
     except Exception:  # noqa: BLE001 — UI 兜底，存储异常转为错误提示
         st.error("读取指标数据失败，请稍后重试")
         return
@@ -76,22 +122,14 @@ def _show_series_charts() -> None:
         if e.value is None or e.published_at is None or e.published_at < cutoff:
             continue
         series.setdefault(e.title, []).append((e.published_at, e.value))
-    if not series:
+    groups = [g for dim in dims for g in _INDICATOR_GROUPS[dim]]
+    if not any(any(series.get(t) for t in variants.values()) for _, variants in groups):
         st.info("暂无指标数据，点击下方「🔄 立即采集」获取")
         return
     cols = st.columns(2)
-    for i, (title, points) in enumerate(sorted(series.items())):
-        df = (
-            pd.DataFrame(sorted(points, key=lambda p: p[0]), columns=["date", "value"])
-            .groupby("date")
-            .last()
-        )
+    for i, (name, variants) in enumerate(groups):
         with cols[i % 2]:
-            st.markdown(
-                f"**{title}** · 最新 {df['value'].iloc[-1]:,.2f}"
-                f"（{df.index[-1]:%Y-%m-%d}）"
-            )
-            st.line_chart(df["value"])
+            _render_indicator_card(name, variants, series)
 
 
 def _collect_now() -> None:
@@ -192,11 +230,24 @@ def _show_events(dim: Dimension | None) -> None:
 
 
 def render() -> None:
-    st.set_page_config(page_title="市场监控", page_icon="📊")
+    st.set_page_config(page_title="市场监控", page_icon="📊", layout="wide")
     st.title("📊 市场监控")
 
     _show_holdings_hint()
-    _show_series_charts()  # 指标趋势默认展示，采集只做增量更新
+
+    # 指标分类放主内容区左侧（不与折线图争抢侧边栏空间）
+    cat_col, chart_col = st.columns([1, 5])
+    with cat_col:
+        st.subheader("指标分类")
+        category = st.radio(
+            "指标分类",
+            list(_CATEGORY_DIMS),
+            index=0,
+            label_visibility="collapsed",
+        )
+    with chart_col:
+        _show_series_charts(_CATEGORY_DIMS[category])
+
     _show_metrics()
 
     st.button("🔄 立即采集", on_click=_collect_now)
