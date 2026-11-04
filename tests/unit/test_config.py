@@ -31,3 +31,13 @@ def test_settings_agent_defaults(monkeypatch):
     assert s.tavily_api_key == ""  # 空 = 不注册 web_search
     assert s.agent_max_iterations == 5
     assert s.tavily_max_results == 5
+
+
+def test_settings_langsmith_defaults(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-dash")
+    from app.config import Settings
+
+    s = Settings(_env_file=None)
+    assert s.langsmith_api_key == ""  # 空 = 观测静默，存量链路零影响（D019）
+    assert s.langsmith_project == "deepfinresearch"

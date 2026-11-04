@@ -1,3 +1,5 @@
+from langsmith import traceable
+
 from app.models import RagAnswer, RetrievedChunk
 from app.pipeline.citations import build_citations
 from app.pipeline.prompts import (
@@ -8,6 +10,11 @@ from app.pipeline.prompts import (
     is_smalltalk,
 )
 from app.retrieval.retriever import Retriever
+
+
+@traceable(name="retrieve", run_type="retriever")
+def _traced_retrieve(retriever: Retriever, question: str) -> list[RetrievedChunk]:
+    return retriever.retrieve(question)
 
 
 class RAGPipeline:
@@ -32,10 +39,11 @@ class RAGPipeline:
             },
         ]
 
+    @traceable(name="rag_answer", run_type="chain")
     def answer(self, question: str) -> RagAnswer:
         if is_smalltalk(question):
             return RagAnswer(answer=SMALLTALK_ANSWER)
-        chunks = self.retriever.retrieve(question)
+        chunks = _traced_retrieve(self.retriever, question)
         if not chunks:
             return RagAnswer(answer=NO_CONTEXT_ANSWER)
         messages = self.build_messages(question, chunks)

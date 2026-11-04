@@ -2,7 +2,7 @@
 
 import logging
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.ingest.indexer import Indexer
 from app.llm.client import DeepSeekClient
 from app.llm.embedding import DashScopeEmbedder
@@ -30,6 +30,16 @@ from app.tools.web_search import WebSearchTool
 logger = logging.getLogger(__name__)
 
 
+def _build_llm(s: Settings) -> DeepSeekClient:
+    return DeepSeekClient(
+        s.deepseek_api_key,
+        s.deepseek_base_url,
+        s.deepseek_model,
+        langsmith_api_key=s.langsmith_api_key,
+        langsmith_project=s.langsmith_project,
+    )
+
+
 def build_pipeline() -> RAGPipeline:
     s = get_settings()
     store = VectorStore(persist_dir=s.chroma_dir)
@@ -37,7 +47,7 @@ def build_pipeline() -> RAGPipeline:
         s.dashscope_api_key, s.dashscope_base_url, s.embedding_model
     )
     retriever = Retriever(store, embedder, s.top_k, s.score_threshold)
-    llm = DeepSeekClient(s.deepseek_api_key, s.deepseek_base_url, s.deepseek_model)
+    llm = _build_llm(s)
     return RAGPipeline(retriever, llm)
 
 
@@ -49,7 +59,7 @@ def build_agent_pipeline() -> AgentPipeline:
         s.dashscope_api_key, s.dashscope_base_url, s.embedding_model
     )
     retriever = Retriever(store, embedder, s.top_k, s.score_threshold)
-    llm = DeepSeekClient(s.deepseek_api_key, s.deepseek_base_url, s.deepseek_model)
+    llm = _build_llm(s)
     registry = ToolRegistry()
     registry.register(KnowledgeSearchTool(retriever))
     registry.register(CurrentTimeTool())

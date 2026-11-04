@@ -230,3 +230,11 @@ def test_history_capped_and_content_truncated():
     assert len(msgs) == 1 + 10 + 1  # system + 最近 10 条历史 + 本轮问题
     assert msgs[1]["content"] == "q4"  # 只保留最近 10 条
     assert len(msgs[-2]["content"]) == 1500  # 超长单条被截断
+
+
+def test_session_id_accepted_and_inert_without_tracing(monkeypatch):
+    """观测未开启（无 LANGSMITH_TRACING）时传 session_id 不影响正常问答。"""
+    monkeypatch.delenv("LANGSMITH_TRACING", raising=False)
+    agent, _, _ = make_agent([ChatResponse(content="ok")])
+    result = agent.answer("x", session_id="sess-123")
+    assert result.answer == "ok"

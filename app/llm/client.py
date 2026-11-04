@@ -1,7 +1,9 @@
 # app/llm/client.py
 import json
+import os
 from typing import Any, Protocol, runtime_checkable
 
+from langsmith.wrappers import wrap_openai
 from openai import APIConnectionError, OpenAI, RateLimitError
 from pydantic import BaseModel, Field
 from tenacity import (
@@ -41,9 +43,22 @@ class LLMClient(Protocol):
 
 
 class DeepSeekClient:
-    def __init__(self, api_key: str, base_url: str, model: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        model: str,
+        langsmith_api_key: str = "",
+        langsmith_project: str = "",
+    ) -> None:
         self.model = model
-        self._client = OpenAI(api_key=api_key, base_url=base_url)
+        if langsmith_api_key.strip():
+            # langsmith SDK 靠环境变量自启；无 LANGSMITH_TRACING 时 wrap_openai 完全透传
+            os.environ["LANGSMITH_TRACING"] = "true"
+            os.environ["LANGSMITH_API_KEY"] = langsmith_api_key.strip()
+            if langsmith_project:
+                os.environ["LANGSMITH_PROJECT"] = langsmith_project
+        self._client = wrap_openai(OpenAI(api_key=api_key, base_url=base_url))
 
     @retry(
         retry=retry_if_exception_type((RateLimitError, APIConnectionError)),

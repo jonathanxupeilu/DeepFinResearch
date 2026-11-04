@@ -186,6 +186,22 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 
 # 变更记录（原 CHANGELOG.md 内容并入）
 
+## [Unreleased]（2026-11-04 · 四期观测埋点接入 LangSmith）
+
+### Added
+- **LangSmith 观测埋点（D019 实施）**：新增依赖 `langsmith>=0.14`
+  - `config.py`：可选 `langsmith_api_key`（空=全静默）/ `langsmith_project`（默认 deepfinresearch）
+  - `llm/client.py`：DeepSeekClient 构造时按 Key 注入 `LANGSMITH_*` env + `wrap_openai`
+    包装（无 Key 完全透传）；factory 两处 LLM 构造收口为 `_build_llm`
+  - `pipeline/agent.py`：`answer` 加 `session_id` 参数（advisor 页传 chat_store 会话
+    id），内部双层结构 `answer → @traceable _traced_answer`（langsmith_extra 走
+    metadata.session_id 串 thread）；工具执行经 `@traceable _traced_tool_run` 记
+    tool span
+  - `pipeline/rag.py`：`@traceable` 埋 answer 与检索 span（run_type=retriever）
+  - `.env.example` 补 LANGSMITH 两项；测试 234→238（config 默认值、client env
+    注入两路径、agent session_id 惰性、advisor 会话 id 串联断言）
+  - 真实 Key 冒烟（PoC 步骤 1-6 中 3/4/5）待用户配置 LANGSMITH_API_KEY 后验证
+
 ## [Unreleased]（2026-11-04 · 四期观测平台选型调研与定案）
 
 ### Added

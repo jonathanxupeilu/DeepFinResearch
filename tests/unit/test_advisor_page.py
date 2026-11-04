@@ -14,10 +14,17 @@ from app.models import Citation, RagAnswer, TraceStep
 
 
 class FakePipeline:
-    def answer(self, question, history=None):
+    def answer(self, question, history=None, session_id=None):
         with open(os.environ["CALL_LOG"], "a", encoding="utf-8") as f:
             f.write(
-                json.dumps({"q": question, "history": history or []}, ensure_ascii=False)
+                json.dumps(
+                    {
+                        "q": question,
+                        "history": history or [],
+                        "session_id": session_id,
+                    },
+                    ensure_ascii=False,
+                )
                 + "\\n"
             )
         return RagAnswer(
@@ -93,6 +100,9 @@ def test_advisor_second_question_carries_history(tmp_path, monkeypatch):
         {"role": "user", "content": "什么是护城河？"},
         {"role": "assistant", "content": "护城河是指…… [1]"},
     ]
+    # LangSmith thread 串联：同一页面会话内多次提问共用非空 session_id（D019）
+    assert calls[0]["session_id"]
+    assert calls[0]["session_id"] == calls[1]["session_id"]
 
 
 def test_advisor_history_saved_and_resumable(tmp_path, monkeypatch):

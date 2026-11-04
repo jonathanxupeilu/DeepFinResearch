@@ -155,7 +155,11 @@ def render() -> None:
             with st.spinner("思考并查证中…"):
                 result: RagAnswer | None
                 try:
-                    result = get_pipeline().answer(question, history=history)
+                    # 会话 id 与历史对话存储同键，供 LangSmith 串 thread（D019）
+                    sid = st.session_state.setdefault("chat_session_id", uuid4().hex)
+                    result = get_pipeline().answer(
+                        question, history=history, session_id=sid
+                    )
                 except Exception:  # noqa: BLE001 — UI 兜底，任何生成异常都转为错误提示
                     result = None
             if result is None:

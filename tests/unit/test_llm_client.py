@@ -1,4 +1,5 @@
 # tests/unit/test_llm_client.py
+import os
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -134,3 +135,32 @@ def test_chat_with_tools_multiple_calls():
     resp = _client_with_response(msg).chat_with_tools([], tools=TOOLS)
     assert [t.id for t in resp.tool_calls] == ["c1", "c2"]
     assert resp.tool_calls[1].arguments == {"q": 1}
+
+
+def _clear_langsmith_env(monkeypatch):
+    for key in ("LANGSMITH_TRACING", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT"):
+        monkeypatch.delenv(key, raising=False)
+
+
+def test_langsmith_env_injected_when_key_provided(monkeypatch):
+    """有 Key：构造时设置 LANGSMITH_* 环境变量，SDK 据此自动开启追踪。"""
+    _clear_langsmith_env(monkeypatch)
+    c = DeepSeekClient(
+        api_key="k",
+        base_url="http://x",
+        model="m",
+        langsmith_api_key="lsv2_test",
+        langsmith_project="proj",
+    )
+    assert os.environ["LANGSMITH_TRACING"] == "true"
+    assert os.environ["LANGSMITH_API_KEY"] == "lsv2_test"
+    assert os.environ["LANGSMITH_PROJECT"] == "proj"
+    assert c._client is not None  # wrap_openai 包装后仍可正常使用
+
+
+def test_langsmith_env_untouched_when_key_empty(monkeypatch):
+    """无 Key：不触碰环境变量，观测完全静默（存量部署零影响）。"""
+    _clear_langsmith_env(monkeypatch)
+    DeepSeekClient(api_key="k", base_url="http://x", model="m")
+    assert "LANGSMITH_API_KEY" not in os.environ
+    assert "LANGSMITH_TRACING" not in os.environ

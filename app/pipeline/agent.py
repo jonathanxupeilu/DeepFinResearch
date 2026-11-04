@@ -2,20 +2,30 @@
 """三期 ReAct 循环：function calling 工具调用 + 全局证据编号。
 
 与 rag.py（单轮 RAG 快速通道）并列为 pipeline 包的 prompt 组装收口。
+四期观测（D019）：@traceable 埋点，未设 LANGSMITH_TRACING 时完全透传。
 """
 
 import json
+from typing import Any
+
+from langsmith import traceable
+from langsmith.run_helpers import LangSmithExtra
 
 from app.llm.client import ChatResponse, LLMClient, ToolCall
 from app.models import RagAnswer, TraceStep
 from app.pipeline.citations import build_citations
 from app.pipeline.prompts import AGENT_SYSTEM_PROMPT
-from app.tools.base import Evidence
+from app.tools.base import Evidence, Tool, ToolResult
 from app.tools.registry import ToolRegistry
 
 _OBSERVATION_SUMMARY_LIMIT = 200
 _MAX_HISTORY_TURNS = 10  # 注入的历史消息条数上限，防长对话挤占证据与推理窗口
 _HISTORY_CONTENT_LIMIT = 1500  # 单条历史截断长度，防超长旧回答吞掉 token
+
+
+@traceable(name="tool_run", run_type="tool")
+def _traced_tool_run(tool: Tool, arguments: dict[str, Any]) -> ToolResult:
+    return tool.run(arguments)
 
 
 class AgentPipeline:
@@ -32,9 +42,30 @@ class AgentPipeline:
         self.system_prompt = system_prompt  # 五期多 Agent：注入角色化提示词
 
     def answer(
-        self, question: str, history: list[dict[str, str]] | None = None
+        self,
+        question: str,
+        history: list[dict[str, str]] | None = None,
+        session_id: str | None = None,
     ) -> RagAnswer:
-        """history：本轮之前的 user/assistant 消息序列，追问靠它锚定原话题。"""
+        """history：本轮之前的 user/assistant 消息序列，追问靠它锚定原话题。
+
+        session_id：chat_store 会话 id，LangSmith 以 metadata.session_id 把多轮
+        对话串成同一 thread（D019）。
+        """
+        extra: LangSmithExtra | None = (
+            LangSmithExtra(metadata={"session_id": session_id}) if session_id else None
+        )
+        return self._traced_answer(question, history, langsmith_extra=extra)
+
+    @traceable(name="agent_answer", run_type="chain")
+    def _traced_answer(
+        self,
+        question: str,
+        history: list[dict[str, str]] | None,
+        langsmith_extra: (
+            LangSmithExtra | None
+        ) = None,  # 由 traceable 包装器消费，不进函数体
+    ) -> RagAnswer:
         messages: list[dict] = [{"role": "system", "content": self.system_prompt}]
         for turn in (history or [])[-_MAX_HISTORY_TURNS:]:
             messages.append(
@@ -74,7 +105,7 @@ class AgentPipeline:
         if tool is None:
             observation = f"未知工具: {tc.name}，请改用可用工具或直接回答。"
         else:
-            result = tool.run(tc.arguments)
+            result = _traced_tool_run(tool, tc.arguments)
             if result.evidence:
                 start = len(evidence) + 1
                 observation = "\n\n".join(

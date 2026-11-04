@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     agent_max_iterations: int = 5
     tavily_max_results: int = 5
+    # 四期观测（D019）：LangSmith 空 Key = 全静默不上报，存量链路零影响
+    langsmith_api_key: str = ""
+    langsmith_project: str = "deepfinresearch"
 
 
 @lru_cache

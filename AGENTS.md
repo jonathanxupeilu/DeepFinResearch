@@ -4,7 +4,7 @@
 
 ## 项目是什么
 
-本地知识库 RAG 投研问答助手，七期路线图演进为多 Agent 投研平台。当前状态：**一至三期已完成**（234 unit/integration 测试绿 + e2e 冒烟含真实 function calling 链路）。
+本地知识库 RAG 投研问答助手，七期路线图演进为多 Agent 投研平台。当前状态：**一至三期已完成**（238 unit/integration 测试绿 + e2e 冒烟含真实 function calling 链路），四期观测埋点已接入（LangSmith，D019）。
 
 ## 路线图（v3，七期）
 
@@ -13,7 +13,7 @@
 | 一期 | 本地 RAG 问答（入库→检索→prompt→LLM 带引用）+ Streamlit/CLI | ✅ 完成 |
 | 二期 | 市场监控面板（公告/要闻/宏观/美联储/会议/行业 6 维度），左菜单双页导航 | ✅ 完成 |
 | 三期 | 工具调用 + ReAct 自主决策（AgentPipeline，取代一期闲聊正则分流） | ✅ 完成 |
-| 四期 | 测评集与评估体系 Evals 构建（观测平台已选型 LangSmith，D019） | 调研完成，PoC 未启动 |
+| 四期 | 测评集与评估体系 Evals 构建（观测平台已选型 LangSmith，D019） | 观测埋点已完成，真实 Key PoC 待验证 |
 | 五期 | 记忆与上下文管理（短期/长期，ContextBuilder） | 未启动 |
 | 六期 | 多 Agent 编排（芒格/施洛斯/巴菲特/邓普顿/马克斯五种投资思维角色） | 未启动 |
 | 七期 | 财报/研报深度解读 + PTC 确定性财务计算（DCF/清算价值） | 未启动 |
@@ -56,8 +56,8 @@ cli.py / webapp.py → factory ─→ pipeline/agent.py（三期默认入口，R
 
 | 文件 | 职责 | 关键约束 |
 |---|---|---|
-| `app/pipeline/agent.py` | AgentPipeline：function calling ReAct 循环、全局证据编号 [n]、未知工具/失败容错、max_iterations 熔断后强制终答；`answer(question, history)` 注入多轮上下文（最近 10 条、单条截断 1500 字） | 与 rag.py 并列为 prompt 收口；系统提示词静态常量（时间靠 current_time 工具，D016）；六期多 Agent 在此注入角色 |
-| `app/pipeline/rag.py` | 检索→prompt→LLM→RagAnswer 带引用；空检索诚实拒答 | 单轮快速通道（e2e 基线），Agent 入口已废除闲聊正则 |
+| `app/pipeline/agent.py` | AgentPipeline：function calling ReAct 循环、全局证据编号 [n]、未知工具/失败容错、max_iterations 熔断后强制终答；`answer(question, history, session_id)` 注入多轮上下文（最近 10 条、单条截断 1500 字）；四期观测：`@traceable` 埋 answer（内部 `_traced_answer` 接 langsmith_extra）与工具执行 span，session_id 经 metadata 串 LangSmith thread | 与 rag.py 并列为 prompt 收口；系统提示词静态常量（时间靠 current_time 工具，D016）；六期多 Agent 在此注入角色 |
+| `app/pipeline/rag.py` | 检索→prompt→LLM→RagAnswer 带引用；空检索诚实拒答；四期观测：`@traceable` 埋 answer 与检索 span | 单轮快速通道（e2e 基线），Agent 入口已废除闲聊正则 |
 | `app/pipeline/prompts.yaml` | **全部 prompt 唯一维护处**：rag/agent/tools 三组提示词（SYSTEM_PROMPT / AGENT_SYSTEM_PROMPT / USER_TEMPLATE / 拒答文案 / 工具 description） | 调优任何话术只改此文件，prompts.py 加载后暴露常量 |
 | `app/pipeline/prompts.py` | prompts.yaml 加载器：读 yaml 暴露同名常量；闲聊正则 + `is_smalltalk`（程序逻辑）保留在此 | 与 rag.py/agent.py 并列为 prompt 收口 |
 | `app/pipeline/citations.py` | 引用构建共享逻辑（按 [n] 标注过滤/越界忽略/无标注保留全部） | rag 与 agent 共用 |
@@ -69,7 +69,7 @@ cli.py / webapp.py → factory ─→ pipeline/agent.py（三期默认入口，R
 | `app/retrieval/retriever.py` | top-k 检索 + cosine 相似度阈值过滤 | collection 必须是 cosine 空间 |
 | `app/retrieval/store.py` | Chroma 封装（upsert/query/delete/按 source 管理/get_all_metadatas） | 创建集合须带 `metadata={"hnsw:space": "cosine"}` |
 | `app/retrieval/stats.py` | 离线仓库统计（纯函数）：文章数/分类/最新入库 | 只聚合不查库；缺 indexed_at 的旧数据兜底 |
-| `app/llm/client.py` | LLMClient Protocol + DeepSeekClient：chat / chat_with_tools | 走接口抽象；工具参数非法 JSON 降级空参；重试仅限限流/连接类 |
+| `app/llm/client.py` | LLMClient Protocol + DeepSeekClient：chat / chat_with_tools；四期观测：`wrap_openai` 包装 + 构造时按 langsmith_api_key 注入 LANGSMITH_* env | 走接口抽象；工具参数非法 JSON 降级空参；重试仅限限流/连接类；无 LangSmith Key 时 wrap_openai 完全透传 |
 | `app/llm/embedding.py` | DashScope embedding（分批 10 条/重试/截断） | 重试仅限 RateLimitError/APIConnectionError + reraise=True |
 
 ### 入库链路（上传文档的数据流）
@@ -95,7 +95,7 @@ cli.py / webapp.py → factory ─→ pipeline/agent.py（三期默认入口，R
 
 | 文件 | 职责 |
 |---|---|
-| `app/config.py` | Pydantic Settings 读 .env（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY 必填；TAVILY_API_KEY 可选=空则不注册 web_search；agent_max_iterations 等全部可调参数） |
+| `app/config.py` | Pydantic Settings 读 .env（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY 必填；TAVILY_API_KEY 可选=空则不注册 web_search；LANGSMITH_API_KEY 可选=空则观测静默；agent_max_iterations 等全部可调参数） |
 | `app/models.py` | Pydantic v2 模型：Document/Chunk/RetrievedChunk/Citation/TraceStep/RagAnswer（含 trace）/ChatMessage/ChatSession——**禁裸 dict 传核心业务数据** |
 | `app/chat_store.py` | 历史对话存储：JSON 单文件会话持久化（同 id upsert、updated_at 倒序、原子写），advisor 页「历史对话」面板续聊数据源 |
 
