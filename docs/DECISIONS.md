@@ -160,6 +160,38 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 
 # 踩坑记录（工程陷阱与优化演进，只增不改）
 
+## 2026-11-04 · LangSmith SDK 0.14.17 trace 回读与 Dataset 写入坑
+
+- **`list_runs()` 的过滤参数名看着能用、实际不生效**：`name=` / `trace_id=` /
+  `parent_run_id=` 传进去一律被忽略（不报错，返回全量或空）。可靠做法是全量扫描后
+  客户端自己过滤：`r.name == 'agent_answer' and r.parent_run_id is None`
+- **子 run 继承父 metadata**：`session_id` 挂在 metadata 上会向下传播，只按 metadata
+  匹配会抓到**子 run** 当根（症状：存下的 trace_id 查不到任何 children）。必须同时要求
+  `parent_run_id is None`
+- **UUIDv7 前 8 位是时间段**：同一秒内创建的 run，id 前缀完全相同（`01a1a592…`）。
+  截断打印做比对会得出「id 对不上」的假结论，比对要用全量 id
+- **根 run 先入库、子 run 走批量队列**：`answer()` 返回后立刻回读只有根没有子（症状：
+  `llm_calls=0 tokens=0`）。需要轮询等子 run 出现（实测 3s 间隔、数十秒内到齐）
+- **方法签名与文档/直觉不一致**（都要 keyword-only 或首参改名）：
+  `create_dataset(dataset_name, ...)`（不是 `name=`，且无 `exist_ok`，先 `has_dataset`）；
+  `has_dataset(dataset_name=...)`；`get_run_url(run=..., project_name=...)`；
+  `read_run(load_child_runs=True)` 在 0.14.17 拿不到子 run
+- **Dataset 幂等写入**：`create_examples` 重复推会堆重复条目。用 `metadata.item_id`
+  作键，先 `list_examples` 找出同 id 的旧条目 `delete_examples` 再写
+
+## 2026-11-04 · LangSmith 密钥有效性探针选错导致误判
+
+- **`/tenants` 不能当「Key 是否有效」的探针**：个人 Key 是 workspace 作用域，列租户恒返
+  回 403，且响应体与「乱码 Key / 不带 Key」**完全一致**（`{"type":"about:blank","title":
+  "Forbidden"...}`），据此判定「账号侧未开通」是误诊。可用探针：`GET /datasets`（有效 Key
+  返 200）或直接上官方 SDK `Client(api_url=...).list_datasets()`
+- **鉴权头只认 `x-api-key`**：`Authorization: Bearer <key>` 返 401 `{"detail":"Invalid
+  token"}`——401 与 403 是两种含义，别混
+- **区域错配的症状是 403 而非 401**：APAC 的 Key 打 `api.smith.langchain.com`（美国）直接
+  403，看起来像密钥失效；排查时必须逐端点各打一次对比
+- **手搓 httpx 不如用 SDK**：SDK 自带正确 header、租户解析与错误语义，一次调用就能区分
+  「密钥无效」与「该端点无权限」；用裸请求做连通性结论要谨慎
+
 ## 2026-11-03 · 宏观指标扩容与社融同比自算
 
 - GDP「国内生产总值-绝对值」是年初至今**累计值**非单季：`单季k = 累计k - 累计(k-1)`、Q1 单季 = 累计1；季度标签实为 `2026年第1-3季度`（含「第」，GBK 控制台乱码看不出），regex 须 `(\d{4})年第?(\d)(?:-(\d))?季度`
@@ -185,6 +217,74 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 ---
 
 # 变更记录（原 CHANGELOG.md 内容并入）
+
+## [Unreleased]（2026-11-04 · 四期 Evals 基线集搭建（优化前留档））
+
+### Added
+- `evals/questions.yaml`：测评集**本体**（人工唯一真源）。6 题覆盖知识库概念/财报/个股、
+  多轮追问、库内缺失-声明后联网、时间锚定+联网；每题带 `expected` 判分要点、
+  `time_sensitive` 标记（true 的题跨次只比指标不比答案文本）
+- `evals/dataset.yaml`：**生成物**（跑出来的基线）。每题记 answer / citations 数 /
+  轮数 / LLM 次数 / tool span / total_tokens / 耗时 / 逐条检索 query / trace 链接 +
+  采集时的 git_rev 与 config 快照
+- `scripts/build_evals.py`：真实链路采集器。`--dry-run`（只列计划）/ `--only`（按 id
+  重跑并**合并**回文件，改名题会清掉僵尸条目）/ `--push` / `--push-only`（不花 token
+  重推现有基线）。token 与 LLM 次数按 `session_id` 从 LangSmith 回读
+- LangSmith Dataset `deepfin-evals-v1`：6 条 example 已推送（inputs=题目、
+  outputs=expected+基线答案+指标、metadata.item_id 作幂等键）
+
+### 基线实测（rev 1fe9452，temperature 0.3）
+| 题 | 轮 | LLM | token | 引用 | 耗时 |
+|---|---|---|---|---|---|
+| kb-moat-definition | 1 | 2 | 4,877 | 4 | 5.2s |
+| kb-pdd-eps-miss | 1 | 2 | 1,086 | 4 | 7.7s |
+| kb-beike-value | 2 | 3 | 4,375 | 3 | 8.7s |
+| kb-sector-rotation-followup | 4 | 5 | 20,251 | 17 | 31.1s |
+| kb-miss-declare-then-web | 4 | 5 | 24,137 | 16 | 29.0s |
+| time-anchored-gold-rally | 4 | 5 | 40,189 | 16 | 20.5s |
+
+- **成本分层**：纯知识库题 1–2 轮 / 1–5K token；一旦联网 4–5 轮 / 2–4 万 token。
+  贵的是 web_search 观察原文逐轮滚存，不是 ReAct 架构本身
+- **检索质量已达标**：逐条 query 显示主题词全程保留（三期修订五的多轮丢失问题已修）；
+  真正问题是每轮并行 2 个**语义高度重叠**的检索
+- **单次基线不可信**（同题两次跑：贝壳 13 引用 → 3；追问 44,776 → 20,251 token；
+  黄金 9,879 → 40,189）。优化前后对比需先定每题重复次数 n 取中位数，**待定**
+
+### Changed
+- 判分口径（用户定）：`kb-miss-refusal` 原题「诚实拒答」→ 改名
+  `kb-miss-declare-then-web`「库内缺失-声明后联网」——库里没有 → 如实声明 → 转联网
+  视为**正确行为**，不再当拒答缺陷
+
+### Known issue（记入待修，未动代码）
+- Agent 为说明「库里没有」，会把讲贝壳/拼多多的**无关库内切片**标成 [1][2][7] 引用，
+  引用池混入与结论无关的证据 → citations 虚高。判分要点已用 `must_not` 钉住
+
+## [Unreleased]（2026-11-04 · LangSmith PoC 步骤 1 验证：补齐区域端点配置）
+
+### Added
+- **`langsmith_endpoint` 配置项**：`config.py` 新增可选字段（默认空 = SDK 美国端点）；
+  `llm/client.py` 有 Key 时注入 `LANGSMITH_ENDPOINT` env（无 Key 仍完全不触碰环境变量）；
+  `factory.py` 的 `_build_llm` 透传；`.env.example` 补该键并标注 APAC/EU 取值
+- 测试 238→240（config 端点默认值 + 读 env；client 端点注入 / 空 Key 不注入）
+- 本地 `.env` 补 `LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com`、
+  `LANGSMITH_PROJECT=deepfinresearch`
+
+### 验证结论（PoC 步骤 1/3，真实 Key）
+- **Key 有效、区域 APAC**：官方 SDK `Client(api_url=https://apac.api.smith.langchain.com)`
+  调 `list_datasets()` 返回 200 + tenant_id；同一 Key 打美国端点 `api.` 返回 403
+  → 证实 `LANGSMITH_ENDPOINT` 是区域账号的必填项（本次补的配置项）
+- **trace 上报链路通**：`@traceable` 嵌套调用（chain→tool）在 APAC 项目
+  `deepfinresearch` 落库，`list_runs` 读到 parent/child 两条 run，status=success
+- **国内连通性正常**：DNS 解析 api/eu/apac/smith 四域名均通；`/info` 200 真实元数据
+  （uvicorn、`via: 1.1 google`、版本 0.18.21）；延迟 700–1400ms；无代理拦截
+- **待验**：PoC 步骤 4/5（真实 DeepSeek 提问的工具 span 层级、`session_id` 串 thread）
+  需启动应用实际提问后在面板查看
+- **步骤 4/5 已验（用户实测提问「今天黄金板块为什么集体涨停」）**：根 run
+  `agent_answer` 29.48s → 4 次 `ChatOpenAI(deepseek-chat)`（input_tokens 1.06K→27.96K
+  逐轮滚存）+ 5 个 `tool_run` span（含 current_time）→ 终答带 18 条 citations；
+  run metadata 里有 `session_id`，thread 串联生效
+- **显示层假象**：控制台 Input 面板把 `langsmith_extra` 渲染成 `null`（该 kwarg 被包装器
+  消费后不再进函数体），不代表 session_id 没传——以 run metadata 为准
 
 ## [Unreleased]（2026-11-04 · 四期观测埋点接入 LangSmith）
 

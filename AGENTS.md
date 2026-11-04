@@ -4,7 +4,7 @@
 
 ## 项目是什么
 
-本地知识库 RAG 投研问答助手，七期路线图演进为多 Agent 投研平台。当前状态：**一至三期已完成**（238 unit/integration 测试绿 + e2e 冒烟含真实 function calling 链路），四期观测埋点已接入（LangSmith，D019）。
+本地知识库 RAG 投研问答助手，七期路线图演进为多 Agent 投研平台。当前状态：**一至三期已完成**（240 unit/integration 测试绿 + e2e 冒烟含真实 function calling 链路），四期观测埋点已接入（LangSmith，D019）。
 
 ## 路线图（v3，七期）
 
@@ -13,7 +13,7 @@
 | 一期 | 本地 RAG 问答（入库→检索→prompt→LLM 带引用）+ Streamlit/CLI | ✅ 完成 |
 | 二期 | 市场监控面板（公告/要闻/宏观/美联储/会议/行业 6 维度），左菜单双页导航 | ✅ 完成 |
 | 三期 | 工具调用 + ReAct 自主决策（AgentPipeline，取代一期闲聊正则分流） | ✅ 完成 |
-| 四期 | 测评集与评估体系 Evals 构建（观测平台已选型 LangSmith，D019） | 观测埋点已完成，真实 Key PoC 待验证 |
+| 四期 | 测评集与评估体系 Evals 构建（观测平台已选型 LangSmith，D019） | 观测埋点已验证（APAC，trace 可上报）+ 6 题基线集已搭（`evals/`）；评分器与「每题跑几次」待定 |
 | 五期 | 记忆与上下文管理（短期/长期，ContextBuilder） | 未启动 |
 | 六期 | 多 Agent 编排（芒格/施洛斯/巴菲特/邓普顿/马克斯五种投资思维角色） | 未启动 |
 | 七期 | 财报/研报深度解读 + PTC 确定性财务计算（DCF/清算价值） | 未启动 |
@@ -91,11 +91,19 @@ cli.py / webapp.py → factory ─→ pipeline/agent.py（三期默认入口，R
 | `app/monitor/runner.py` | 线程池并行执行，on_report 完成即报，返回保持注入顺序 | 入库/水位线在主线程 |
 | `scripts/probe_collectors.py` | 真实接口采集探针（冒烟/排查列名用） | 直连 akshare，会联网 |
 
+### 四期 Evals（优化前留档 / 前后对比）
+
+| 文件 | 职责 | 关键约束 |
+|---|---|---|
+| `evals/questions.yaml` | 测评集**本体**（人工唯一真源）：6 题 + `expected` 判分要点 + `time_sensitive` 标记（true 的题跨次只比指标不比答案文本） | 题目 id 改名后重跑会自动清掉 dataset 里的旧条目 |
+| `evals/dataset.yaml` | **生成物**：跑出来的基线（答案 / 轮数 / LLM 次数 / token / 引用数 / 逐条检索 query / trace 链接 + git_rev 与 config 快照） | 不要手改；判分口径变了就改 questions.yaml 再重跑 |
+| `scripts/build_evals.py` | 真实链路采集 + 推 LangSmith Dataset `deepfin-evals-v1`；`--dry-run` / `--only` / `--push` / `--push-only`（不花 token 重推现有基线） | 会真实调 DeepSeek/Tavily；token 与 LLM 次数按 `session_id` 从 LangSmith 回读，子 run 走批量上报需等待 |
+
 ### 基础设施
 
 | 文件 | 职责 |
 |---|---|
-| `app/config.py` | Pydantic Settings 读 .env（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY 必填；TAVILY_API_KEY 可选=空则不注册 web_search；LANGSMITH_API_KEY 可选=空则观测静默；agent_max_iterations 等全部可调参数） |
+| `app/config.py` | Pydantic Settings 读 .env（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY 必填；TAVILY_API_KEY 可选=空则不注册 web_search；LANGSMITH_API_KEY 可选=空则观测静默；LANGSMITH_ENDPOINT 可选=空则美国端点，APAC/EU 账号必填；agent_max_iterations 等全部可调参数） |
 | `app/models.py` | Pydantic v2 模型：Document/Chunk/RetrievedChunk/Citation/TraceStep/RagAnswer（含 trace）/ChatMessage/ChatSession——**禁裸 dict 传核心业务数据** |
 | `app/chat_store.py` | 历史对话存储：JSON 单文件会话持久化（同 id upsert、updated_at 倒序、原子写），advisor 页「历史对话」面板续聊数据源 |
 

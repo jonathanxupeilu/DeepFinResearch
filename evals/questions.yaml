@@ -1,0 +1,85 @@
+# 四期 Evals 测评集本体（人工维护的唯一真源）
+#
+# 用法：
+#   .venv/Scripts/python.exe scripts/build_evals.py --dry-run   # 只看计划，不调 LLM
+#   .venv/Scripts/python.exe scripts/build_evals.py             # 跑真实链路，回填基线到 evals/dataset.yaml
+#   .venv/Scripts/python.exe scripts/build_evals.py --push      # 额外把基线同步到 LangSmith Dataset
+#
+# 约定：
+#   - time_sensitive: true 的题目，跨次对比只看轮数/工具序列/token，不看答案文本（外部行情会变）
+#   - expected 是人工判分要点（草稿，待用户逐条确认/修订），不是自动断言
+#   - 题目必须能在本地知识库（14 chunk）或公开行情上复现，禁止一次性闲聊题
+
+name: deepfin-evals
+version: 1
+description: 三期 Agent（ReAct + 工具调用）回答质量基线集，用于四期观测下的优化前后对比
+items:
+  - id: kb-moat-definition
+    category: 知识库-概念
+    question: 什么是护城河理论？请先调用知识库检索工具查证再回答。
+    history: []
+    time_sensitive: false
+    expected:
+      must_call_tools: [knowledge_search]
+      must_mention: [可持续竞争优势, 品牌]
+      citation_required: true
+      must_not: [编造知识库外的具体公司案例]
+
+  - id: kb-pdd-eps-miss
+    category: 知识库-财报
+    question: 笔记里拼多多那次 EPS miss 为什么会导致估值折价？请查知识库后回答。
+    history: []
+    time_sensitive: false
+    expected:
+      must_call_tools: [knowledge_search]
+      must_mention: [EPS, 估值]
+      citation_required: true
+      must_not: [编造具体财务数字（营收/利润金额）]
+
+  - id: kb-beike-value
+    category: 知识库-个股
+    question: 笔记是怎么论证贝壳的长期投资价值的？请基于知识库回答。
+    history: []
+    time_sensitive: false
+    expected:
+      must_call_tools: [knowledge_search]
+      must_mention: [贝壳]
+      citation_required: true
+      must_not: [把笔记里没有的结论安在笔记头上]
+
+  - id: kb-sector-rotation-followup
+    category: 多轮追问
+    question: 那消费板块具体要看哪些指标来验证？
+    history:
+      - role: user
+        content: 目前下一轮板块轮动你倾向哪个方向？依据是什么？
+      - role: assistant
+        content: 按知识库笔记，倾向地产消费方向，理由是经济轮动（参考美国互联网泡沫后的资产再配置）。[1]
+    time_sensitive: false
+    expected:
+      must_call_tools: [knowledge_search]
+      retrieval_query_must_contain: [消费]
+      must_not: [检索 query 泛化成「指标」这类丢主题词的宽词]
+
+  - id: kb-miss-declare-then-web
+    category: 库内缺失-声明后联网
+    question: 请结合知识库分析日本核污水排派对A股水产板块的影响。
+    history: []
+    time_sensitive: true
+    expected:
+      # 判分口径（用户 2026-11-04 定）：库里没有 → 如实声明 → 转联网查证，是正确行为
+      must_call_tools: [knowledge_search]
+      must_mention: [知识库中没有, 联网]
+      must_not:
+        - "把与结论无关的库内切片挂成 [n] 引用充数"
+        - 不声明来源就给出结论
+
+  - id: time-anchored-gold-rally
+    category: 时间锚定+联网
+    question: 今天黄金板块为什么集体涨停，外围有什么变动？
+    history: []
+    time_sensitive: true
+    expected:
+      must_call_tools: [current_time, web_search]
+      must_mention: [今日, 来源]
+      must_not: [不核实就接受「集体涨停」这一前提]
