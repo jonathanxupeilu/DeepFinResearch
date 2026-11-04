@@ -50,6 +50,7 @@ class DeepSeekClient:
         model: str,
         langsmith_api_key: str = "",
         langsmith_project: str = "",
+        langsmith_endpoint: str = "",
     ) -> None:
         self.model = model
         if langsmith_api_key.strip():
@@ -58,6 +59,9 @@ class DeepSeekClient:
             os.environ["LANGSMITH_API_KEY"] = langsmith_api_key.strip()
             if langsmith_project:
                 os.environ["LANGSMITH_PROJECT"] = langsmith_project
+            if langsmith_endpoint.strip():
+                # 区域账号（APAC/EU）不设端点会上报到美国端点被 403 静默丢弃
+                os.environ["LANGSMITH_ENDPOINT"] = langsmith_endpoint.strip()
         self._client = wrap_openai(OpenAI(api_key=api_key, base_url=base_url))
 
     @retry(

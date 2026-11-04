@@ -138,7 +138,12 @@ def test_chat_with_tools_multiple_calls():
 
 
 def _clear_langsmith_env(monkeypatch):
-    for key in ("LANGSMITH_TRACING", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT"):
+    for key in (
+        "LANGSMITH_TRACING",
+        "LANGSMITH_API_KEY",
+        "LANGSMITH_PROJECT",
+        "LANGSMITH_ENDPOINT",
+    ):
         monkeypatch.delenv(key, raising=False)
 
 
@@ -155,12 +160,32 @@ def test_langsmith_env_injected_when_key_provided(monkeypatch):
     assert os.environ["LANGSMITH_TRACING"] == "true"
     assert os.environ["LANGSMITH_API_KEY"] == "lsv2_test"
     assert os.environ["LANGSMITH_PROJECT"] == "proj"
+    assert "LANGSMITH_ENDPOINT" not in os.environ  # 未配置 = SDK 默认端点
     assert c._client is not None  # wrap_openai 包装后仍可正常使用
+
+
+def test_langsmith_endpoint_injected_when_provided(monkeypatch):
+    """APAC 等区域账号必须显式设端点，否则上报打到美国端点被 403 静默丢弃。"""
+    _clear_langsmith_env(monkeypatch)
+    DeepSeekClient(
+        api_key="k",
+        base_url="http://x",
+        model="m",
+        langsmith_api_key="lsv2_test",
+        langsmith_endpoint="https://apac.api.smith.langchain.com",
+    )
+    assert os.environ["LANGSMITH_ENDPOINT"] == "https://apac.api.smith.langchain.com"
 
 
 def test_langsmith_env_untouched_when_key_empty(monkeypatch):
     """无 Key：不触碰环境变量，观测完全静默（存量部署零影响）。"""
     _clear_langsmith_env(monkeypatch)
-    DeepSeekClient(api_key="k", base_url="http://x", model="m")
+    DeepSeekClient(
+        api_key="k",
+        base_url="http://x",
+        model="m",
+        langsmith_endpoint="https://apac.api.smith.langchain.com",
+    )
     assert "LANGSMITH_API_KEY" not in os.environ
     assert "LANGSMITH_TRACING" not in os.environ
+    assert "LANGSMITH_ENDPOINT" not in os.environ

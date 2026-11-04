@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # 四期观测（D019）：LangSmith 空 Key = 全静默不上报，存量链路零影响
     langsmith_api_key: str = ""
     langsmith_project: str = "deepfinresearch"
+    # 区域账号必填：APAC=https://apac.api.smith.langchain.com，EU=https://eu.api.smith.langchain.com
+    langsmith_endpoint: str = ""
 
 
 @lru_cache

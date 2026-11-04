@@ -37,6 +37,7 @@ def _build_llm(s: Settings) -> DeepSeekClient:
         s.deepseek_model,
         langsmith_api_key=s.langsmith_api_key,
         langsmith_project=s.langsmith_project,
+        langsmith_endpoint=s.langsmith_endpoint,
     )
 
 

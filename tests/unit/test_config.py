@@ -41,3 +41,14 @@ def test_settings_langsmith_defaults(monkeypatch):
     s = Settings(_env_file=None)
     assert s.langsmith_api_key == ""  # 空 = 观测静默，存量链路零影响（D019）
     assert s.langsmith_project == "deepfinresearch"
+    assert s.langsmith_endpoint == ""  # 空 = SDK 默认美国端点
+
+
+def test_settings_langsmith_endpoint_reads_env(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-dash")
+    monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://apac.api.smith.langchain.com")
+    from app.config import Settings
+
+    s = Settings(_env_file=None)
+    assert s.langsmith_endpoint == "https://apac.api.smith.langchain.com"
