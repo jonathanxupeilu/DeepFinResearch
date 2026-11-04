@@ -1,6 +1,6 @@
 # DeepFinResearch
 
-本地 RAG 智能问答助手（一期）。路线图：RAG 问答 → 工具调用/ReAct → 记忆 → 多Agent → PTC 财务计算。
+本地 RAG 智能问答助手（一期）。路线图：RAG 问答 → 工具调用/ReAct → Evals 评估体系 → 记忆 → 多Agent → PTC 财务计算。
 
 ## 快速开始
 1. `python -m venv .venv && .venv/Scripts/activate`（Windows）

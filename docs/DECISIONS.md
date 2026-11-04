@@ -140,6 +140,22 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 
 用户要求：任何踩坑和优化 log 统一以本文件为准，不再散落在设计文档。决策：本文件新增「**踩坑记录**」节（与 D 编号决策、变更记录并列，只增不改）；设计文档只留架构与实施修订，踩坑类内容一律迁入此处并留指针。三期设计文档 §13 已按此迁移。
 
+## D018 · 路线图 v3：新增四期 Evals 评估体系（2026-11-03）
+
+用户决定在三期与「记忆与上下文管理」之间插入新四期「**测评集与评估体系 Evals 构建**」，原四至六期顺延为五至七期（记忆→五期、多 Agent→六期、财报+PTC→七期）。具体评测体系待用户设计后再出方案。AGENTS.md / README / 总设计 / 三期设计中的期号已同步；本文件历史条目（D002/D003 等）保留当时期号不改。
+
+## D019 · 四期观测平台选型：LangSmith 免费档（2026-11-04）
+
+四期第一步「搭建观测平台」选型，三轮调研（全文见 `docs/plans/2026-11-04-evals-observability-litefuse-feasibility.md`）：用户指定 Litefuse → Helicone 网关 → **定案 LangSmith Developer 免费档**（云端零部署，5K traces/月，14 天保留）。
+
+**排除原则**：
+1. **个人轻量项目不跑重型数据库**——Litefuse/Langfuse 自部署依赖 Doris/ClickHouse 底座（Docker 常驻 4-6GB 内存），收益/成本不匹配，排除；
+2. **观测平台必须看得到工具级链路且自带评估能力**——Helicone 纯 HTTP 网关只见 LLM 请求，ReAct 循环的工具执行耗时/参数/结果是盲区，且 datasets/评分能力弱（四期即 Evals，需一工具闭环），排除。
+
+**决策考量**：① `wrap_openai` + `@traceable` 官方支持裸 openai SDK 栈（不引入 LangChain 框架），能记录完整 Run 树（提问→迭代→工具 span→终答），支撑四期「工具选择正确率/参数正确率」评测；② Datasets + LLM-as-judge + `evaluate()` 原生覆盖四期后续步骤；③ 计量按 trace（一次提问=1 条，嵌套调用不重复计数），免费额度实际比按请求计数的网关宽裕；④ 14 天保留可接受——bad case 及时沉淀进 Dataset（不随 trace 过期），测评集本体落本地 git。
+
+**代价与退路**：prompt（含知识库切片）经 LangChain 美国云，个人投研数据用户已接受；收紧时切本地 JSONL + Streamlit 兜底方案；锁定面仅装饰器 + 环境变量，拆除成本低。配置全部可选，缺 Key 静默降级，不影响 234 个存量测试。
+
 ---
 
 # 踩坑记录（工程陷阱与优化演进，只增不改）
@@ -169,6 +185,23 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 ---
 
 # 变更记录（原 CHANGELOG.md 内容并入）
+
+## [Unreleased]（2026-11-04 · 四期观测平台选型调研与定案）
+
+### Added
+- `docs/plans/2026-11-04-evals-observability-litefuse-feasibility.md`：观测平台三轮
+  选型调研（Litefuse 自部署 → Helicone 网关 → LangSmith 定案，决策见 D019），含
+  LangSmith 接入方案（wrap_openai/@traceable 改动面映射到 config/client/agent/rag）
+  与 6 步 PoC 验证清单；前两轮调研留档作决策记录
+
+## [Unreleased]（2026-11-03 · 路线图 v3：新增四期 Evals 评估体系）
+
+### Changed
+- 路线图六期→七期：插入新四期「测评集与评估体系 Evals 构建（待设计）」，原四至六期
+  顺延为五至七期（决策见 D018）
+- 同步期号：`AGENTS.md`（路线图/文档索引/agent.py/loaders.py 行）、`README.md`（路线图
+  一句话）、总设计（愿景列表 + §8/§9/§10 展望标题 + 衔接文字）、三期设计（非目标/
+  时间锚定两处角色 prompt 期号）
 
 ## [Unreleased]（2026-11-03 · prompt 收口迁移 prompts.yaml + Agent 逐步思考）
 
