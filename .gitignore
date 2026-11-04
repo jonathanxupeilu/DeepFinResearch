@@ -8,3 +8,4 @@ data/
 knowledge/
 *.egg-info/
 .workbuddy/
+.qoder/
