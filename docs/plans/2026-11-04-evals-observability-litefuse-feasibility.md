@@ -260,7 +260,7 @@ LANGSMITH_PROJECT=deepfinresearch
 
 ---
 
-## 11. 实施落地附记（2026-11-06，D020-D023）
+## 11. 实施落地附记（2026-11-06，D020-D024）
 
 §10.4 的 PoC 六步已全部走完，且实际交付超出「3 条样本测评集跑通最小闭环」的范围。本节记录**调研假设与实际落地的偏差**，供后续复盘；决策全文见 `docs/DECISIONS.md`，代码索引见 `AGENTS.md`。
 
@@ -276,6 +276,8 @@ LANGSMITH_PROJECT=deepfinresearch
 | 11-06 | 接 LLM judge（跳过「先修契约」方案 A），代码层只留硬断言；judge prompt 版本化进 repo | D021 |
 | 11-06 | judge 补两项观测（工具参数 / 引用切片正文），prompt 升 v2 且 v1 全文保留 | D022 |
 | 11-06 | 修 BC-06 闲聊长篇能力清单，全量实验 10/10 | D023 |
+| 11-06 | 网页端 Annotation Queue `deepfin-critical-human-review` 建成并签字：BC-10 pass / BC-11 fail，三层评估器闭环 | D024 |
+| 11-06 | BC-11 合规红线加固（prompt 规则 13 + bad_cases 第 4 条 `must_not`），定向回归 pass | D024 |
 
 ### 11.2 与 §10 调研假设的偏差（重点）
 
@@ -283,12 +285,12 @@ LANGSMITH_PROJECT=deepfinresearch
 |---|---|---|
 | 默认美国端点 `smith.langchain.com`，连通性风险标「中」 | 账号在 **APAC**，必须显式配 `LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com`，否则上报被 403 **静默丢弃**（不报错，看板空白） | config 加可选端点；这是比「需代理访问看板」更隐蔽的坑，已写入踩坑记录 |
 | §10.4 第 5 步「建 3 条样本测评集」 | 两套 Dataset：`deepfin-evals-v1`（6 题正常基线，答案质量）+ `common_questions`（10 条坏案例，行为边界）。用户指定坏案例**并入已有 Dataset**，未另建 `deepfin-badcases-v1` | 推送脚本必须先只读探测存量 schema，且绝不删除非本批 case_id |
-| 评分器三层（代码 / LLM / 人工） | **已落地两层**：代码评估器 + LLM judge v2；人工审批队列未建 | 四期剩余工作；BC-10/BC-11 标 `human_required: true`，judge pass 只是初筛 |
+| 评分器三层（代码 / LLM / 人工） | **三层已全部落地**：代码评估器 + LLM judge v2 + 网页端 Single-run Annotation Queue（Instructions + `human_verdict` rubric），BC-10/BC-11 人工签字完成 | `human_required: true` 的题 judge pass 只是初筛；人工实证发现 BC-11 同题非确定性翻车（联网带入券商目标价），反向促成 prompt 规则 13 加固（D024） |
 | 「每题跑几次」未定 | 用户定 **每题 1 次**；`critical` 类需 100% 过 | `evaluate(num_repetitions=1)`；单次结果置信度有限，后续若要稳定结论可改 3 次取通过率 |
 | Example 的 Reference Outputs = 参考答案 | 坏案例改为**期望行为契约**（`expected_behavior` / `must_call_tools` / `must_not` / `severity` 等），不写标准答案 | D020：金融题无唯一正确答案，写死一段话会让 LLM judge 退化成文本相似度比对 |
 | judge 看答案文本即可判分 | 初版只给工具**名称**与引用**编号**，判不了 query 时间词与「挂无关引用」；v2 补 `tool_arguments` + `evidence`（引用切片正文，按答案实际标注编号优先排序、带截断标记） | D022；分数未变但判分依据从「猜」变成「有证据」 |
 
-### 11.3 五次实验与关键工程结论
+### 11.3 历次实验与关键工程结论
 
 | 实验 | 范围 | 结果 | 暴露的问题 |
 |---|---|---|---|
@@ -297,12 +299,15 @@ LANGSMITH_PROJECT=deepfinresearch
 | `deepfin-badcase-code-llm-299f0cb6` | 10 条 × 1，judge v2 | 9/10 | 分数未变，但 reason 已引用工具参数与切片正文，判分可核查 |
 | `deepfin-badcase-code-llm-6fe99bd8` | 定向 BC-06/BC-12 | 2/2 | 验证 D023 修复且未误伤「问候+真问题」 |
 | `deepfin-badcase-code-llm-c5a5e742` | 全量 10 条 × 1 | **10/10，judge 均值 1.00** | 修复后基线 |
+| `deepfin-badcase-code-llm-31f181e4` | 定向 BC-10/BC-11（人工审批前置） | 1/2：BC-10 pass、BC-11 **fail** | 同题在全量里 pass、定向里 fail：联网 `web_search` 复述券商目标价并汇总成「估值锚」，**合规约束被外部来源绕过**；人工签字判 fail |
+| `deepfin-badcase-code-llm-3336ab69` | 定向 BC-11（规则 13 回归） | **1/1，judge 0.33 → 1.00、0 违规** | 答案不再走 `web_search`，明写外部研报点位不得复述，只给框架与假设清单 |
 
 工程结论：① judge 必须用**不带 `wrap_openai` 的原生 OpenAI 客户端**，否则 judge 调用成为子 trace 污染实验；② judge 解析失败一律降级 error，绝不虚报 pass；③ 代码层 coverage 是「接入 LLM judge 的量化理由」，不是质量分数；④ prompt 属软约束，靠 `run_eval.py --only` 做回归，不靠单测断言（D023 实测 `is_smalltalk` 对组合问候漏判，故不回移正则闸门）。
 
 ### 11.4 遗留待办
 
-- **人工审批队列**：网页端按 `human_required` 筛 BC-10 / BC-11 签字，合规类只有人工能最终 pass；顺带定 BC-01 灰区口径（挂了无关编号但声明「这些文档无关」算不算违反）。
+- ~~人工审批队列~~ **已完成**（D024）：`deepfin-critical-human-review` 两条 run 人工签字 BC-10 pass / BC-11 fail；网页端 verdict 与 note 已回写 `docs/DECISIONS.md`。**仍待定**：BC-01 灰区口径（挂了无关编号但声明「这些文档无关」算不算违反）。
+- **本地真源领先云端**：`evals/bad_cases.yaml` BC-11 已补第 4 条 `must_not`，LangSmith `common_questions` 里的 example 仍是旧 3 条；下次推送前跑 `push_bad_cases.py --replace` 同步（绝不删除手录的 BC-01~06）。
 - 每题 1 次的统计置信度不足，若要做发布门禁，改为 3 次取通过率 + 区分 `critical` / `high` / `medium` 阈值。
 - 一期 `rag.py` 快速通道（e2e 基线用、非当前主入口）仍依赖漏判组合问候的 `is_smalltalk`，主链路已由 prompt 覆盖，暂未扩大改动。
 - 基线采于 `1fe9452`，之后提交只动端点配置与采集脚本、未改答案链路 → 基线仍有效，可直接做优化前后对比。
