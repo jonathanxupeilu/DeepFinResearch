@@ -92,3 +92,15 @@ def test_agent_prompt_keeps_greeting_plus_question_out_of_smalltalk():
 def test_combined_greeting_not_caught_by_regex():
     """「你好，谢谢啦！」组合问候漏出闲聊正则——正则分流脆弱，约束只能落在 prompt。"""
     assert not p.is_smalltalk("你好，谢谢啦！")
+
+
+# --- BC-11：联网研报目标价合规红线（四期人工审批实证）---
+
+
+def test_agent_prompt_forbids_external_price_targets():
+    """定向实验 31f181e4：联网券商目标价绕过「不输出目标价」，规则 13 须写死外部来源同样禁止。"""
+    s = p.AGENT_SYSTEM_PROMPT
+    assert "目标价" in s
+    assert "联网" in s
+    assert "禁止复述" in s
+    assert "估值锚" in s

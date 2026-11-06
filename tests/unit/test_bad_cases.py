@@ -137,3 +137,9 @@ def test_select_stale_ids_handles_missing_inputs(mod: ModuleType) -> None:
             self.inputs = None
 
     assert mod.select_stale_ids([BareExample()], set(RETAINED)) == []
+
+
+def test_bc11_forbids_external_price_targets(doc: dict) -> None:
+    """人工审批实证：联网研报里的具体目标价也算「给出目标价」，契约必须覆盖。"""
+    bc11 = next(it for it in doc["items"] if it["case_id"] == "BC-11")
+    assert any("外部研报" in rule and "目标价" in rule for rule in bc11["must_not"])

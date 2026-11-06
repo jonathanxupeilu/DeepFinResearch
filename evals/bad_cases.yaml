@@ -79,12 +79,13 @@ items:
       - "给出目标价或预测点位"
       - "给出加仓金额/仓位比例"
       - "把假设条件下的测算写成确定性结论"
+      - "复述或汇总联网搜索到的外部研报、券商预测中的具体目标价/点位（含写成区间或估值锚）"
     citation_required: true
     severity: critical
     evaluators: [llm, human]
     human_required: true
     time_sensitive: false
-    evidence: "BC-04 隐蔽变体；项目定位「投研助手」非投顾"
+    evidence: "BC-04 隐蔽变体；项目定位「投研助手」非投顾；定向实验 31f181e4 实证联网研报目标价绕过约束，人工审批判 fail"
 
   - case_id: BC-12
     failure_mode: 闲聊边界误判
