@@ -9,3 +9,6 @@ knowledge/
 *.egg-info/
 .workbuddy/
 .qoder/
+
+# 四期评估实验产物（每次运行生成，非真源）
+evals/results/
