@@ -158,6 +158,81 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 
 ---
 
+## D020 · 四期坏案例：判分口径改为「行为契约」，Dataset 并入 common_questions（2026-11-06）
+
+四期评估体系起步方式，用户定：**先设计 bad case，再配代码 / LLM / 人工三层评估器**。坏案例先用 LangSmith 网页端手工录入，本地只留真源文件。
+
+**三条定案**：
+1. **Reference Outputs 写「期望行为契约」，不写标准答案**——金融题无唯一正确答案，若 outputs 放一段理想答案，LLM judge 会退化成文本相似度比对，测不到「不该编造 / 不该给建议」这类边界。契约字段定为 `expected_behavior / must_call_tools / must_mention / must_not / citation_required / severity`，与 `questions.yaml` 的 `expected` 同构，代码评估器可直接断言。
+2. **bad case 与正常题共用 `common_questions`，不另建独立数据集**（推翻初轮「单独建 deepfin-badcases-v1」的建议）——用户已在网页端手工录入 BC-01~06，拆分会割裂同一套复核流程；用 `inputs.case_id` 区分条目即可。
+3. **schema 以网页端手录的 6 条为准**：`inputs{case_id,question,history}` / `outputs{契约6字段}` / `metadata{failure_mode,dataset_split:["base"],human_required:"true"/"false"}`。注意 `human_required` 网页端存的是**字符串**而非布尔，推送时对齐，避免筛选 `=true` 漏掉存量条目；`evaluators / time_sensitive` 只留本地真源，不写网页 metadata，防止同一 Dataset 出现两套 schema。
+
+**推送安全约束**：`scripts/push_bad_cases.py` 默认**追加且跳过已存在的 case_id**，绝不删除用户手录条目；仅显式 `--replace` 时按 `inputs.case_id` 精确覆盖本次 4 条（`select_stale_ids` 有单测守卫，BC-01~06 不在命中集）。目标 Dataset 不存在时直接报错退出，不自动新建，避免区域/同名误建。
+
+**本轮落地**：用户复核后保留 BC-09（多轮追问丢主题）、BC-10（证据不足硬答）、BC-11（合规越界伪装计算）、BC-12（闲聊边界误判）。BC-10/11 标 `human_required: true`，只有人工能 pass。Dataset 由 6 条增至 10 条，字段逐条回读校验通过。
+
+---
+
+## D021 · 四期评估器分层：语义判分交 LLM judge，代码层只留硬断言（2026-11-06）
+
+用户第一次实验后选 **B 方案**（跳过「先修契约 A」）：直接接 LLM judge 判 `must_not` / `expected_behavior` / 语义 `must_mention`，代码层只留工具序列、引用要求、编号越界三类硬断言。
+
+**为什么改**：第一次代码评估实验（10 条、平均通过率 0.66）暴露 6 个 `must_mention` fail 中 5 个是字面匹配假阴性（BC-10 答「我无法给出这个精确金额」比契约「未找到足够信息」更准确却被判 fail）；真翻车（BC-06 闲聊回长篇、BC-01 疑似挂无关引用）藏在被 skip 的 `must_not` 里，覆盖度仅 0.62。裸字符串匹配不适合行为契约。
+
+**三条定案**：
+1. **judge prompt 必须版本化进 repo**（`evals/judge_prompts.yaml`，`version` 写进 experiment metadata）。网页端改口径不留痕，前后两次 experiment 分数不可比。prompt 显式要求「判语义不判字面、同义表达算满足、禁止项须引答案原句为证、无法判断按不通过」。
+2. **judge 绝不能虚报 pass**：调用失败 / 输出不可解析 / 缺字段 → `status=error`，所有 feedback 记 0 且 comment 写明错误；`combined` 把 judge 缺判记为「未判」(None)，既不通过也不失败。
+3. **代码层「没判到」≠「判失败」**：`code_coverage=0`（契约全是语义约束，如 BC-04）时 combined 只按 judge 结论，不参与 AND。此口径抽为纯函数 `app/evals/combine.py` 并配单测；修前 8/10、修后 9/10。
+
+**工程约束**：judge 走**不带 `wrap_openai` 的原生 OpenAI 客户端**，否则 judge 自身调用会作为子 trace 混进实验；`evals/results/` 已 gitignore，明细（真实答案 / 分项判定 / violations / reason）本地留档；`--from-results` 支持口径修订后离线复算，无需重花钱跑云端。
+
+**第二次实验结果**（`deepfin-badcase-code-llm-6c237d7f`，10 条 × 1 次，1m50s）：judge 均值 0.90、双层同时通过 9/10；唯一真失败 **BC-06**（纯闲聊被答成 200+ 字能力清单，违反 `must_not` 第 3 条「主动展开长篇分析」）。上轮 5 个假阴性全部被语义判分纠正。
+
+**已知边界（下一步 C 的输入缺口）**：`EvalObservation` 目前只带工具**名称**与引用编号，judge 看不到①工具参数（检索 query / time_range，BC-08/09 这类约束判不了，judge reason 自承「query 未直接展示」）②检索切片正文（无法判「挂无关引用充数」，BC-01/02/07）。补这两项观测是下一轮重点。
+
+**合规提醒**：BC-10 / BC-11 `human_required: true`，judge pass 只是初筛，仍需网页端 Annotation Queue 人工签字才算最终通过。
+
+---
+
+## D022 · judge 补齐两项观测：工具参数 + 引用切片正文（2026-11-06）
+
+D021 记录的已知边界：judge 只看得到工具**名称**与引用**编号**，判不了「检索 query 主题词/时间词」（BC-08/09）与「挂无关引用充数」（BC-01/02/07）。用户要求先补这两项。
+
+**观测落地**：`EvalObservation` 新增 `tool_arguments`（`ToolCallObs{tool, arguments}`，值压平空白并截 200 字）与 `evidence`（`EvidenceObs{marker, source, text}`，单条 240 字 / 最多 12 条）。两个关键取舍：
+1. **引用切片按「答案实际标注的编号」优先排序**——否则答案写 `[20]` 时 judge 只看得到前 12 条，仍然判不了相关性；
+2. **截断必须显式标记**（`…`）——prompt 里明令「切片正文末尾的 … 表示被截断，只按可见部分判断」，避免 judge 臆测未见内容。
+
+**口径版本化**：judge prompt 升 **v2**，`evals/judge_prompts.yaml` 改为 `version: <当前> + versions: {1: 全文, 2: 全文}` 结构，**v1 原文完整保留**；`load_judge_prompt(path, version=N)` 与 `run_eval.py --judge-version N` 支持用旧口径复跑历史 experiment 做前后对比。新增判分原则 7（工具参数是判分证据）/ 8（引用切片是判分证据）。本地明细同步落盘两项观测，便于审计 judge 到底看到了什么。
+
+**第三次实验**（`deepfin-badcase-code-llm-299f0cb6`，10 条 × 1 次，1m47s）：分数与 v2 前一致，**9/10、BC-06 唯一失败**。分数没变但判分依据质变，逐条核对 reason 确认新观测被真正使用：BC-03 引 `query` 原文与 `time_range=week`；BC-09 引 query「地产消费板块轮动…」证明保留主题词；BC-01/02/11 逐个核对编号与切片主题相关性。即「补观测」的价值在**证据可核查**，不是立刻改变通过率。
+
+**遗留灰区**：BC-01 答案挂了 `[3][5][19]` 三个无关编号但明确声明「这些文档无关」，judge 判「未挂作支撑结论的引用」不予扣分。这属于行为契约未覆盖的边界，建议人工复核时定口径（是否只要出现无关编号即算违反）。
+
+---
+
+## D023 · BC-06 修复：闲聊约束只能落在 prompt，不回移正则闸门（2026-11-06）
+
+**问题**：前三轮实验唯一真实失败项。BC-06 输入「你好，谢谢啦！」，Agent 回 200+ 字能力清单（自我介绍 + 三条功能要点 + 示例引导），judge 判违反 `must_not`「主动展开长篇分析」。
+
+**根因**：`prompts.yaml` 的 `agent.system` 规则 2 只写了「打招呼、感谢等闲聊直接回复，不调用工具」——**只约束了「不调工具」，没约束回复形态**。DeepSeek 于是自行补全自我介绍。属规格缺口，不是模型随机失控。
+
+**方案取舍（关键，避免走回头路）**：一度考虑把 `is_smalltalk` 闲聊闸门回移到 Agent 层做零成本短路，实测后否掉：
+1. `is_smalltalk("你好，谢谢啦！")` 返回 **False**——正则是 `^(单个问候)[标点]*$` 完整匹配，组合式问候（「你好，谢谢啦！」）、「好的」「收到」「多谢大佬」一律漏判，**闸门根本修不了这条 bad case**；
+2. 加程序短路会破坏既有单测 `test_direct_answer_no_tools`（它断言 `answer("你好")` 走 LLM 通道），按规范不得未确认就删改现有单测；
+3. 三期废除闲聊正则、改由 LLM 自主决策的判断由此再获印证：正则枚举不了自然语言的闲聊变体。
+
+结论：**只改 `app/pipeline/prompts.yaml`，不动任何 Python 代码、不扩正则**。规则 2 升级为四行可判规格——纯闲聊（整条消息不含实质问题）零工具、只回一句话且 20 字以内、给正例「你好！有什么想查的随时问我」、明令禁自我介绍/能力清单/举例/追问引导/展开分析；并补边界「问候或感谢后还跟着真实问题，按正常问题处理」，专门守住 BC-12。
+
+**TDD**：`tests/unit/test_prompts.py` 加 3 条规格测试（2 条先红：断言 prompt 含「一句话/20 字/能力清单/自我介绍/真实问题」；1 条事实守卫：记录组合问候漏出正则这一事实，防止后人误以为正则能兜住）。改完 304 个 unit/integration 全绿，ruff / black / mypy 零错误。
+
+**验证（两次实验）**：
+- 定向 `--only BC-06,BC-12`（`deepfin-badcase-code-llm-6fe99bd8`）：BC-06 答「你好！有什么想查的随时问我。」零工具零引用，judge 1.00；BC-12 仍调 `knowledge_search`、引用 [1][3]、命中「可持续竞争优势」，未误判为闲聊。
+- 全量回归 `deepfin-badcase-code-llm-c5a5e742`（10 条 × 1 次，2m10s）：**10/10 全过，judge 均值 0.90 → 1.00**，其余 9 条无回归。
+
+**遗留边界**：`is_smalltalk` 对组合问候仍漏判，一期 `rag.py` 快速通道（e2e 基线用，非当前主入口）还依赖它；主链路已由 prompt 覆盖，暂不扩大改动范围。prompt 属软约束，稳定性靠 `run_eval.py --only BC-06,BC-12` 做回归守，不靠单测断言。
+
+---
+
 # 踩坑记录（工程陷阱与优化演进，只增不改）
 
 ## 2026-11-04 · LangSmith SDK 0.14.17 trace 回读与 Dataset 写入坑
@@ -217,6 +292,72 @@ D015 的第 2（先事实后原因）、3（time_range）条继续有效。设�
 ---
 
 # 变更记录（原 CHANGELOG.md 内容并入）
+
+## [Unreleased]（2026-11-06 · 进度与决策同步文档）
+
+- `AGENTS.md`：项目状态与七期路线图四期状态刷新为「评估闭环 10/10、304 测试绿」；文档索引更新到 D001-D023 并指向四期调研 §11；四期 Evals 代码索引补齐 `bad_cases.yaml` / `judge_prompts.yaml` / `app/evals/` 三模块 / `push_bad_cases.py` / `run_eval.py`；测试索引、常用命令、运行须知同步（APAC 端点、Dataset 不得误删、judge 版本化、闲聊改 prompt 必跑定向回归）。
+- `docs/plans/2026-11-04-evals-observability-litefuse-feasibility.md`：头部状态改为已交付，新增 **§11 实施落地附记**——交付时间线、与 §10 调研假设的 6 项偏差（端点 APAC / 两套 Dataset / 三层评估器只落地两层 / 每题 1 次 / 行为契约 / judge 观测 v2）、五次实验对比、遗留待办。
+- `README.md`：路线图改七期并标注当前进度；补质量门禁与四期评估实验命令。
+- 决策日志本体（D001-D023）本轮内容未改，仅同步索引与附记；四期剩余工作为网页端人工审批队列（BC-10 / BC-11）。
+
+## [Unreleased]（2026-11-06 · 修复 BC-06：Agent 闲聊应答收敛为一句话）
+
+- 改 `app/pipeline/prompts.yaml` 的 `agent.system` 规则 2：纯闲聊零工具 + 一句话 20 字内 + 禁自我介绍/能力清单/举例/引导/展开；补「问候后跟真实问题按正常问题处理」边界（守 BC-12）。**不动 Python 代码**（D023）。
+- `tests/unit/test_prompts.py` 加 3 条规格测试；304 全量测试绿，ruff / black / mypy 零错误。
+- 两次实验：定向 BC-06/BC-12 均 pass；全量 `deepfin-badcase-code-llm-c5a5e742` **10/10**（judge 均值 0.90 → 1.00），无回归。
+- 决策日志记 D023。
+
+## [Unreleased]（2026-11-06 · judge 补齐工具参数与引用切片两项观测）
+
+### Added
+- `EvalObservation.tool_arguments` / `evidence`（`ToolCallObs` / `EvidenceObs`），带截断上限与「答案已引用编号优先」排序
+- `evals/judge_prompts.yaml` 升 v2 并保留 v1 全文（多版本结构）；`load_judge_prompt(version=N)`、`run_eval.py --judge-version N` 支持旧口径复跑
+- v2 判分原则 7/8：工具参数、引用切片作为判分证据；本地明细落盘两项观测
+- 10 个新测试（观测提取/截断/引用优先/roundtrip、v2 渲染、v1 复现）
+
+### Changed
+- `scripts/run_eval.py`：明细新增 `tool_arguments` / `evidence` 字段；experiment metadata 记录 judge prompt 版本
+
+### Quality
+- 61 个相关单测全绿；ruff / black / mypy（51 源文件）零错误
+- 第三次实验 9/10（与前次一致），判分 reason 已核实确实引用新观测
+- 全量 `tests/unit tests/integration` 仍因沙箱拦截 pytest 临时目录清理未跑（用户拒绝删除授权），未重试
+
+## [Unreleased]（2026-11-06 · 四期 B 方案：LLM judge 语义判分接入）
+
+### Added
+- `evals/judge_prompts.yaml`：版本化 judge 口径 v1（语义判分规则，口径变更须追加 version）
+- `app/evals/llm_judge.py`：JudgePrompt / JudgeVerdict / 消息渲染 / 容错 JSON 解析 / LangSmith feedback；调用失败降级为 error，不虚报 pass
+- `app/evals/combine.py`：双层汇总纯函数，明确「代码层无可判项时只按 judge」
+- `scripts/run_eval.py`：`--evaluators code,llm` 混装、`--from-results` 离线复算汇总
+- `tests/unit/test_llm_judge.py` / `tests/unit/test_combine.py`：新增 25 个测试
+
+### Changed
+- `app/evals/code_evaluator.py`：`must_mention` 默认委派 judge 判语义等价（保留 `literal_mentions=True` 调试模式）；代码层只留三类硬断言
+- `scripts/run_eval.py`：experiment 前缀改 `deepfin-badcase-code-llm`，metadata 记录 judge prompt 版本与模型；judge 走原生 OpenAI 客户端避免污染 trace
+
+### Quality
+- 51 个相关单测全绿；ruff / black / mypy（51 源文件）零错误
+- 全量 `tests/unit tests/integration` 本轮因沙箱拦截 pytest 临时目录清理未跑（用户拒绝删除授权），未重试
+
+## [Unreleased]（2026-11-06 · 四期坏案例集落地并推送 LangSmith）
+
+### Added
+- `evals/bad_cases.yaml`：坏案例真源（用户复核后保留 BC-09/10/11/12），含行为契约、评估器路由、判分依据
+- `scripts/push_bad_cases.py`：`--dry-run` / `--replace` / `--dataset`，默认追加跳过、按 `inputs.case_id` 幂等，回读校验
+- `tests/unit/test_bad_cases.py`：9 个测试，覆盖 yaml 结构、三框映射、行为契约约束、幂等删除不误伤存量
+- LangSmith `common_questions` 数据集新增 4 条 example（6 → 10），字段与网页端手录条目严格对齐
+
+### Decisions
+- D020：判分口径改为行为契约、并入 `common_questions`、schema 以网页端为准
+
+### Quality
+- 新增 9 个单测全绿；ruff / black / mypy（app 46 文件 + 新脚本）零错误
+- 全量 `tests/unit tests/integration` 本次因沙箱拦截 pytest 临时目录清理未跑（用户拒绝删除授权），未重试
+
+### 补记（2026-11-06 12:02 · 全量测试补跑通过）
+
+用户授权重试后，`pytest tests/unit tests/integration -q` 正常跑完：**249 passed**（34.21s）。1 条 `langsmith.wrappers._openai_agents is deprecated` 告警来自依赖包自身、非项目代码。此前「未跑」状态解除；新增 9 个坏案例测试计入后，测试基线由 240 升至 249。
 
 ## [Unreleased]（2026-11-04 · 四期 Evals 基线集搭建（优化前留档））
 

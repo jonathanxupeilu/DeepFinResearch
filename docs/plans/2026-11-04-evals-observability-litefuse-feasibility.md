@@ -1,7 +1,7 @@
 # 四期·第一步：观测平台技术选型可行性调研（Litefuse）
 
-> 日期：2026-11-04 ｜ 状态：**已确认定案 LangSmith（D019），待按 §10.4 PoC 开工**；Litefuse（§1-§8）与 Helicone（§9）调研留档作决策记录
-> 背景：四期 Evals 评估体系（D018）的第一步是搭建 LLM 观测平台，用户指定技术选型 Litefuse。本文档为可行性调研结论 + 接入方案草案，非实施计划（实施计划待立项后按 phase 文档格式另出）。
+> 日期：2026-11-04 ｜ 状态：**PoC 与评估体系已交付，§11 为实施落地附记**；定案 LangSmith（D019），Litefuse（§1-§8）与 Helicone（§9）调研留档作决策记录
+> 背景：四期 Evals 评估体系（D018）的第一步是搭建 LLM 观测平台，用户指定技术选型 Litefuse。本文档为可行性调研结论 + 接入方案草案；四期未另出 phase 实施计划，实际交付以 §11 与 `docs/DECISIONS.md`（D019-D023）为准。
 
 ## 1. 结论（TL;DR）
 
@@ -257,3 +257,52 @@ LANGSMITH_PROJECT=deepfinresearch
 - pecollective.com《LangSmith Pricing》：Plus $39/席位/月、400 天保留（升级路径参照）
 - tmtpost《LLM 可观测性平台大乱斗》：LangSmith 计量按 base trace、超额 $0.50/1k；框架绑定批评（本项目仅用 SDK 装饰器，不引入 LangChain，锁定面可控）
 - CSDN《LangSmith 调试与综合项目实战》：DeepSeek + LangSmith 环境变量实践、usage 字段兼容性确认
+
+---
+
+## 11. 实施落地附记（2026-11-06，D020-D023）
+
+§10.4 的 PoC 六步已全部走完，且实际交付超出「3 条样本测评集跑通最小闭环」的范围。本节记录**调研假设与实际落地的偏差**，供后续复盘；决策全文见 `docs/DECISIONS.md`，代码索引见 `AGENTS.md`。
+
+### 11.1 交付时间线
+
+| 日期 | 交付 | 决策/提交 |
+|---|---|---|
+| 11-04 | `wrap_openai` + `@traceable` 埋点、config 可选 Key、CLI/网页无 Key 全静默 | D019 / `1fe9452` |
+| 11-04 | 区域端点可配置（APAC/EU 账号上报不再被 403 静默丢弃） | `9215b7e` |
+| 11-04 | 6 题基线集 `evals/questions.yaml` + `dataset.yaml`（答案/轮数/token/引用/trace 链接 + git_rev 与 config 快照） | `8c8aba2` |
+| 11-06 | 坏案例集：先定 BC-01~06 措辞（用户在 LangSmith 网页手录），再据真实 baseline 翻车点补 BC-07~12，用户复核保留 4 条推入 `common_questions`（6 → 10 条） | D020 |
+| 11-06 | 第一次实验：仅代码评估器 → 发现 `must_mention` 裸字符串匹配假阴性 | — |
+| 11-06 | 接 LLM judge（跳过「先修契约」方案 A），代码层只留硬断言；judge prompt 版本化进 repo | D021 |
+| 11-06 | judge 补两项观测（工具参数 / 引用切片正文），prompt 升 v2 且 v1 全文保留 | D022 |
+| 11-06 | 修 BC-06 闲聊长篇能力清单，全量实验 10/10 | D023 |
+
+### 11.2 与 §10 调研假设的偏差（重点）
+
+| 调研时假设 | 实际落地 | 影响 |
+|---|---|---|
+| 默认美国端点 `smith.langchain.com`，连通性风险标「中」 | 账号在 **APAC**，必须显式配 `LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com`，否则上报被 403 **静默丢弃**（不报错，看板空白） | config 加可选端点；这是比「需代理访问看板」更隐蔽的坑，已写入踩坑记录 |
+| §10.4 第 5 步「建 3 条样本测评集」 | 两套 Dataset：`deepfin-evals-v1`（6 题正常基线，答案质量）+ `common_questions`（10 条坏案例，行为边界）。用户指定坏案例**并入已有 Dataset**，未另建 `deepfin-badcases-v1` | 推送脚本必须先只读探测存量 schema，且绝不删除非本批 case_id |
+| 评分器三层（代码 / LLM / 人工） | **已落地两层**：代码评估器 + LLM judge v2；人工审批队列未建 | 四期剩余工作；BC-10/BC-11 标 `human_required: true`，judge pass 只是初筛 |
+| 「每题跑几次」未定 | 用户定 **每题 1 次**；`critical` 类需 100% 过 | `evaluate(num_repetitions=1)`；单次结果置信度有限，后续若要稳定结论可改 3 次取通过率 |
+| Example 的 Reference Outputs = 参考答案 | 坏案例改为**期望行为契约**（`expected_behavior` / `must_call_tools` / `must_not` / `severity` 等），不写标准答案 | D020：金融题无唯一正确答案，写死一段话会让 LLM judge 退化成文本相似度比对 |
+| judge 看答案文本即可判分 | 初版只给工具**名称**与引用**编号**，判不了 query 时间词与「挂无关引用」；v2 补 `tool_arguments` + `evidence`（引用切片正文，按答案实际标注编号优先排序、带截断标记） | D022；分数未变但判分依据从「猜」变成「有证据」 |
+
+### 11.3 五次实验与关键工程结论
+
+| 实验 | 范围 | 结果 | 暴露的问题 |
+|---|---|---|---|
+| `deepfin-badcase-code-95c6f17d` | 10 条 × 1，仅代码层 | 平均通过率 0.66 / 覆盖度 0.62 | 6 个 `must_mention` fail 里 5 个是字面匹配假阴性；真翻车（BC-06 闲聊长篇）藏在被 skip 的 `must_not` 里 |
+| `deepfin-badcase-code-llm-6c237d7f` | 10 条 × 1，code + judge v1 | 8/10 → 修正口径后 **9/10** | 发现评估器自身缺陷：代码层 `cov=0`（无可判项）被 AND 判失败；用 `--from-results` 离线复算、未重跑云端 |
+| `deepfin-badcase-code-llm-299f0cb6` | 10 条 × 1，judge v2 | 9/10 | 分数未变，但 reason 已引用工具参数与切片正文，判分可核查 |
+| `deepfin-badcase-code-llm-6fe99bd8` | 定向 BC-06/BC-12 | 2/2 | 验证 D023 修复且未误伤「问候+真问题」 |
+| `deepfin-badcase-code-llm-c5a5e742` | 全量 10 条 × 1 | **10/10，judge 均值 1.00** | 修复后基线 |
+
+工程结论：① judge 必须用**不带 `wrap_openai` 的原生 OpenAI 客户端**，否则 judge 调用成为子 trace 污染实验；② judge 解析失败一律降级 error，绝不虚报 pass；③ 代码层 coverage 是「接入 LLM judge 的量化理由」，不是质量分数；④ prompt 属软约束，靠 `run_eval.py --only` 做回归，不靠单测断言（D023 实测 `is_smalltalk` 对组合问候漏判，故不回移正则闸门）。
+
+### 11.4 遗留待办
+
+- **人工审批队列**：网页端按 `human_required` 筛 BC-10 / BC-11 签字，合规类只有人工能最终 pass；顺带定 BC-01 灰区口径（挂了无关编号但声明「这些文档无关」算不算违反）。
+- 每题 1 次的统计置信度不足，若要做发布门禁，改为 3 次取通过率 + 区分 `critical` / `high` / `medium` 阈值。
+- 一期 `rag.py` 快速通道（e2e 基线用、非当前主入口）仍依赖漏判组合问候的 `is_smalltalk`，主链路已由 prompt 覆盖，暂未扩大改动。
+- 基线采于 `1fe9452`，之后提交只动端点配置与采集脚本、未改答案链路 → 基线仍有效，可直接做优化前后对比。
