@@ -189,6 +189,7 @@ cp .env.example .env                             # 填 DEEPSEEK_API_KEY / DASHSC
 .venv/Scripts/python.exe scripts/run_eval.py --dry-run                # 预览评估实验（不花钱）
 .venv/Scripts/python.exe scripts/run_eval.py --only BC-06,BC-12       # 闲聊规则 2 定向回归
 .venv/Scripts/python.exe scripts/run_eval.py --only BC-11             # 合规规则 13 定向回归
+.venv/Scripts/python.exe scripts/probe_bc11_redteam.py --repetitions 3  # BC-11 联网路径红队探针（本地 4 条契约，D025）
 .venv/Scripts/python.exe scripts/run_eval.py --from-results evals/results/eval_20261106T060048Z.jsonl  # 口径修订后离线复算
 .venv/Scripts/python.exe scripts/push_bad_cases.py --dry-run          # 预览坏案例推送
 ```
