@@ -1,5 +1,5 @@
 # scripts/run_eval.py
-"""四期评估实验：代码层硬断言 + LLM judge 语义判定（混装）。
+"""四期评估实验：LLM judge 行为契约判分 + 代码层统计信号（混装）。
 
 用法：
   .venv/Scripts/python.exe scripts/run_eval.py --dry-run        # 不调 LLM、不写云端
@@ -12,7 +12,8 @@
 
 设计约束（用户 2026-11-06 定）：每题跑一次、只跑 common_questions。
 B 方案：must_not / expected_behavior / 语义 must_mention 交 LLM judge；
-代码层只留工具序列与引用硬断言。judge 走不带追踪包装的原生客户端，
+代码层只产出工具序列、引用要求、编号越界等统计信号，不参与判分（D027）。
+judge 走不带追踪包装的原生客户端，
 避免 judge 自身的调用污染实验 trace。
 """
 
@@ -38,6 +39,7 @@ from app.evals.code_evaluator import (
     BehaviorContract,
     EvalObservation,
     check_contract,
+    format_code_stats,
     observation_from_answer,
     to_feedback,
 )
@@ -103,7 +105,12 @@ def make_llm_evaluator(
         obs = EvalObservation.model_validate(outputs)
         contract = BehaviorContract.model_validate(reference_outputs)
         question = str((inputs or {}).get("question", ""))
-        verdict = judge_contract(obs, contract, question, chat, p)
+        # LangSmith 各 evaluator 独立执行、互不通信，judge 拿不到 code 层的
+        # EvalVerdict；这里重算一次（纯函数，无额外网络代价）作为辅助观测。
+        code_stats = format_code_stats(check_contract(obs, contract))
+        verdict = judge_contract(
+            obs, contract, question, chat, p, code_stats=code_stats
+        )
         _record(
             (inputs or {}).get("case_id", ""),
             llm_status=verdict.status,
@@ -163,7 +170,7 @@ def _combined(r: dict[str, Any]) -> float | None:
 
 
 def print_table() -> None:
-    print("\n=== 代码层 + LLM judge 合并分数表 ===")
+    print("\n=== judge 判分 + 代码层统计表 ===")
     print(
         f"{'case':8} {'code':>5} {'cov':>5} {'llm':>5} "
         f"{'comb':>5} {'viol':>4}  status"
@@ -184,14 +191,12 @@ def print_table() -> None:
         avg_llm = sum(r.get("llm_score", 0) for r in rows) / len(rows)
         print(
             f"\n共 {len(rows)} 条 | 代码层均值 {avg_code:.2f} | judge 均值 {avg_llm:.2f}"
-            f" | 双层同时通过 {sum(scored)}/{len(scored)}"
+            f" | judge 通过 {sum(scored)}/{len(scored)}"
         )
         errors = [r["case_id"] for r in rows if r.get("llm_status") == "error"]
         if errors:
             print(f"judge 失败（不判通过）: {', '.join(errors)}")
-        print(
-            "comb = 双层同时满分；代码层无可判项(cov=0)时只按 judge；- 表示 judge 未判到。"
-        )
+        print("comb = judge 判分（代码层仅作统计，不参与判分）；- 表示 judge 未判到。")
 
 
 def save_records() -> Path:
@@ -305,7 +310,7 @@ def main() -> int:
         # feedback 列表（多个 key）；此处按实际行为保留，故局部豁免该类型检查。
         evaluators=evaluators,  # type: ignore[list-item]
         experiment_prefix=EXPERIMENT_PREFIX,
-        description=f"四期 B 方案：代码硬断言 + LLM judge v{p.version}（语义判分）",
+        description=f"四期：LLM judge v{p.version} 行为契约判分 + 代码层统计信号",
         num_repetitions=args.repetitions,
         max_concurrency=1,
         metadata={

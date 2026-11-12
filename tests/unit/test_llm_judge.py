@@ -14,7 +14,12 @@ from typing import Any
 
 import pytest
 
-from app.evals.code_evaluator import BehaviorContract, EvalObservation
+from app.evals.code_evaluator import (
+    BehaviorContract,
+    EvalObservation,
+    check_contract,
+    format_code_stats,
+)
 from app.evals.llm_judge import (
     JudgePrompt,
     JudgeVerdict,
@@ -317,3 +322,91 @@ def test_v2_render_handles_empty_new_observations() -> None:
     body = render_judge_messages(observation(), contract(), "你好", p)[1]["content"]
     assert "(无)" in body
     assert "<<" not in body
+
+
+# --- v3：代码层统计信号进 judge（D027 方案一，仅辅助参考不阻拦）---
+
+
+def test_current_prompt_is_v3_with_code_stats_block() -> None:
+    p = load_judge_prompt(PROMPT_PATH)
+    assert p.version >= 3
+    assert "<<CODE_STATS>>" in p.user_template
+    assert "代码层统计信号" in p.system
+    assert "辅助" in p.system or "参考" in p.system
+
+
+def test_v2_is_preserved_without_code_stats_block() -> None:
+    """旧口径复跑时 judge 不应看到代码层统计信号。"""
+    v2 = load_judge_prompt(PROMPT_PATH, version=2)
+    assert v2.version == 2
+    assert "<<CODE_STATS>>" not in v2.user_template
+    assert "<<TOOL_ARGUMENTS>>" in v2.user_template
+
+
+def test_v1_is_still_preserved_after_v3() -> None:
+    v1 = load_judge_prompt(PROMPT_PATH, version=1)
+    assert v1.version == 1
+    assert "<<CODE_STATS>>" not in v1.user_template
+
+
+def test_render_includes_code_stats_when_provided() -> None:
+    p = load_judge_prompt(PROMPT_PATH)
+    stats = "覆盖度 0.60\n  [fail] must_call_tools: 未调用 web_search"
+    body = render_judge_messages(
+        observation(), contract(), "问题", p, code_stats=stats
+    )[1]["content"]
+    assert "覆盖度 0.60" in body
+    assert "未调用 web_search" in body
+    assert "<<" not in body
+
+
+def test_render_code_stats_defaults_when_absent() -> None:
+    p = load_judge_prompt(PROMPT_PATH)
+    body = render_judge_messages(observation(), contract(), "问题", p)[1]["content"]
+    assert "(未提供)" in body
+    assert "<<" not in body
+
+
+def test_format_code_stats_lists_checks_as_statistics_only() -> None:
+    obs = observation(tool_calls=["knowledge_search"], citations=[])
+    ct = contract(
+        must_call_tools=["knowledge_search", "web_search"],
+        citation_required=True,
+    )
+    text = format_code_stats(check_contract(obs, ct))
+    assert "覆盖度" in text
+    assert "仅统计，不参与判分" in text
+    assert "must_call_tools" in text
+    assert "web_search" in text
+    assert "[fail]" in text or "[pass]" in text, "须逐条列出检查状态"
+
+
+def test_format_code_stats_marks_skipped_checks() -> None:
+    """must_mention 在代码层是 skip（交 judge），摘要须如实标注而非漏掉。"""
+    text = format_code_stats(
+        check_contract(observation(), contract(must_mention=["未找到足够信息"]))
+    )
+    assert "[skip]" in text
+    assert "must_mention" in text
+
+
+def test_judge_contract_forwards_code_stats_without_blocking() -> None:
+    """code 统计里的 [fail] 只是观测，不参与 judge_contract 的机械判定。"""
+    seen: list[Any] = []
+
+    def chat(messages: list[dict[str, str]], temperature: float) -> str:
+        seen.append(messages)
+        return verdict_json()
+
+    v = judge_contract(
+        observation(),
+        contract(),
+        "问题",
+        chat,
+        load_judge_prompt(PROMPT_PATH),
+        code_stats="覆盖度 0.50\n  [fail] must_call_tools: 未调用 web_search",
+    )
+    assert v.status == "pass"
+    body = seen[0][1]["content"]
+    assert "未调用 web_search" in body
+    assert "代码层统计信号" in body

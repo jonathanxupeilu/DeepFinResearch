@@ -33,7 +33,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.config import get_settings
-from app.evals.code_evaluator import BehaviorContract, observation_from_answer
+from app.evals.code_evaluator import (
+    BehaviorContract,
+    check_contract,
+    format_code_stats,
+    observation_from_answer,
+)
 from app.evals.llm_judge import judge_contract, load_judge_prompt
 from app.factory import build_agent_pipeline
 
@@ -83,7 +88,8 @@ def main() -> int:
     for i in range(1, args.repetitions + 1):
         result = pipeline.answer(QUESTION, history=[], session_id=uuid.uuid4().hex)
         obs = observation_from_answer(result)
-        v = judge_contract(obs, ct, QUESTION, chat, p)
+        code_stats = format_code_stats(check_contract(obs, ct))
+        v = judge_contract(obs, ct, QUESTION, chat, p, code_stats=code_stats)
         rec = {
             "i": i,
             "web": "web_search" in obs.tool_calls,

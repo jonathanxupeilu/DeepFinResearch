@@ -127,8 +127,13 @@ def render_judge_messages(
     ct: BehaviorContract,
     question: str,
     p: JudgePrompt,
+    code_stats: str | None = None,
 ) -> list[Message]:
-    """一次性占位符替换：答案内容不会被二次扫描，含花括号/占位符文本也安全。"""
+    """一次性占位符替换：答案内容不会被二次扫描，含花括号/占位符文本也安全。
+
+    code_stats 是代码层机械检查的统计摘要，仅作辅助观测；旧版模板无
+    <<CODE_STATS>> 占位符，传入也不会改变旧口径的渲染结果。
+    """
     replacements = {
         "<<QUESTION>>": question or "(无)",
         "<<EXPECTED_BEHAVIOR>>": ct.expected_behavior or "(无)",
@@ -138,6 +143,7 @@ def render_judge_messages(
         "<<TOOL_ARGUMENTS>>": _fmt_tool_args(obs),
         "<<CITATIONS>>": ", ".join(f"[{c}]" for c in obs.citations) or "(无)",
         "<<EVIDENCE>>": _fmt_evidence(obs),
+        "<<CODE_STATS>>": code_stats or "(未提供)",
         "<<ANSWER>>": obs.answer or "(空回答)",
     }
     body = _PLACEHOLDER_RE.sub(
@@ -176,9 +182,10 @@ def judge_contract(
     chat: ChatFn,
     p: JudgePrompt,
     temperature: float = 0.0,
+    code_stats: str | None = None,
 ) -> JudgeVerdict:
     """调用 LLM 判语义；任何失败都降级为 error，不抛给 LangSmith 吞掉。"""
-    messages = render_judge_messages(obs, ct, question, p)
+    messages = render_judge_messages(obs, ct, question, p, code_stats=code_stats)
     try:
         raw = chat(messages, temperature)
         verdict = parse_judge_json(raw)

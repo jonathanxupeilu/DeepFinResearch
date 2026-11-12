@@ -265,6 +265,21 @@ def observation_from_answer(ans: RagAnswer) -> EvalObservation:
     )
 
 
+def format_code_stats(verdict: EvalVerdict) -> str:
+    """代码层检查结论 → judge 可读的统计摘要。
+
+    只作辅助观测：如实列出每条检查的状态与覆盖度，**不表达通过/失败结论**，
+    也不阻拦任何流程。供 v3 judge 模板的 <<CODE_STATS>> 段落使用。
+    """
+    lines = [
+        f"覆盖度 {verdict.coverage:.2f}（可判项 {len(verdict.applicable)}/{len(verdict.checks)}）",
+        f"机械检查通过率 {verdict.score:.2f}（仅统计，不参与判分）",
+    ]
+    for c in verdict.checks:
+        lines.append(f"  [{c.status}] {c.key}: {c.detail or '(无说明)'}")
+    return "\n".join(lines)
+
+
 def to_feedback(verdict: EvalVerdict) -> list[dict]:
     """EvalVerdict → LangSmith evaluator 返回格式（多个 feedback key）。
 
@@ -284,7 +299,7 @@ def to_feedback(verdict: EvalVerdict) -> list[dict]:
         {
             "key": "code_contract_score",
             "score": verdict.score,
-            "comment": f"硬断言通过率 {verdict.score}；分值为 0 且覆盖度为 0 时代表无可判项，非真实失败",
+            "comment": f"代码层统计通过率 {verdict.score}（辅助信号，不参与判分）；分值为 0 且覆盖度为 0 时代表无可判项",
         }
     )
     feedback.append(

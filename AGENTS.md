@@ -135,10 +135,10 @@ cli.py / webapp.py → factory ─→ pipeline/agent.py（三期默认入口，R
 | `evals/questions.yaml` | 正常题测评集**本体**（人工唯一真源）：6 题 + `expected` 判分要点 + `time_sensitive`（true 的题跨次只比指标不比答案文本） | 题目 id 改名后重跑会自动清掉 dataset 里的旧条目 |
 | `evals/dataset.yaml` | **生成物**：基线答案 / 轮数 / LLM 次数 / token / 引用数 / 逐条 query / trace 链接 + git_rev 与 config 快照 | 不要手改；判分口径变了改 questions.yaml 再重跑 |
 | `evals/bad_cases.yaml` | 坏案例**真源**：BC-09/10/11/12（用户复核版），outputs 写「期望行为契约」而非标准答案（D020）；BC-11 有 4 条 `must_not`，第 4 条禁联网研报目标价（D024） | 与 `common_questions` 里手录的 BC-01~06 共用 schema；`evaluators` / `time_sensitive` 只留本地；**本地 BC-11 契约领先云端**，推 `--replace` 前两边不一致 |
-| `evals/judge_prompts.yaml` | judge 提示词**版本化真源**：`version: 2 + versions{1 全文, 2 全文}`，v1 原文保留供旧口径复跑 | 改判分口径必须升版本、不要覆盖旧版；experiment metadata 会记版本号 |
+| `evals/judge_prompts.yaml` | judge 提示词**版本化真源**：`version: 3 + versions{1/2/3 全文}`；v3 起把代码层统计信号作为辅助观测拼进 user 模板（D027） | 改判分口径必须升版本、不要覆盖旧版；`--judge-version 1/2` 复跑看不到 v3 新信号；experiment metadata 会记版本号 |
 | `app/evals/code_evaluator.py` | 代码评估器（Pydantic 纯函数）：工具序列 / 引用要求 / 编号越界；`EvalObservation` 含工具参数与引用切片正文 | `must_not` 是自然语言，代码层一律 skip 并上报 coverage；`must_mention` 默认委派 judge（`literal_mentions=True` 为调试开关） |
 | `app/evals/llm_judge.py` | LLM judge：按契约判 `expected_behavior` / `must_not` / 语义等价的 `must_mention`，输出结构化 `JudgeVerdict` | **必须用不带 `wrap_openai` 的原生客户端**，否则 judge 调用会污染实验 trace；解析失败降级 error，绝不虚报 pass |
-| `app/evals/combine.py` | 双层合并口径：代码层 `cov=0`（无可判项）时只按 judge；judge 未判到不给分 | D021 修正过「cov=0 被 AND 判失败」的口径缺陷 |
+| `app/evals/combine.py` | 汇总分只按 judge；`code_score` / `code_coverage` 仅为可观测统计信号，不参与判分；judge 未判到不给分 | D021 修过「cov=0 被 AND 判失败」，D027 定案代码层整体为辅助统计手段 |
 | `scripts/build_evals.py` | 真实链路采集 + 推 `deepfin-evals-v1`；`--dry-run` / `--only` / `--push` / `--push-only` | 会真实调 DeepSeek/Tavily；token 与 LLM 次数按 session_id 回读，子 run 批量上报需等待 |
 | `scripts/push_bad_cases.py` | 把 `bad_cases.yaml` 推 `common_questions`；默认追加且跳过已存在 case_id，`--replace` 才按 case_id 精确覆盖 | **绝不删除非本批 case_id 的 example**（用户手录的 BC-01~06）；目标 Dataset 不存在时报错退出、不自动新建 |
 | `scripts/run_eval.py` | 跑 experiment：`evaluate()` + 代码层/judge 混装，明细落 `evals/results/*.jsonl` | `--only` 定向回归 / `--repetitions`（默认 1）/ `--evaluators` / `--judge-version`（旧口径复跑）/ `--from-results`（离线复算、不重花钱）/ `--dry-run` |

@@ -300,6 +300,24 @@ D021 记录的已知边界：judge 只看得到工具**名称**与引用**编号
 
 ---
 
+## D027 · 代码层定位为辅助统计手段，汇总分只按 judge（2026-11-12）
+
+**触发**：用户在四期评估集收口时明确纠正——代码层检查是「辅助判断的统计手段，不是硬约束」。核实发现该定位在云端成立、本地汇总不成立：`run_eval.py` 写入 LangSmith 的是多个独立 feedback key（`code_must_call_tools` / `code_contract_score` / `code_coverage` / `llm_*`），**云端本就没有单一 combined 判定**；但 `combine.py:30` 的本地 `print_table` 汇总用 `code_score == 1.0 and judge_ok` 的 AND，把代码层当成了 pass/fail 门槛。用户确认改逻辑。
+
+**定案**：`combined_score` 汇总分只按 judge；`code_score` / `code_coverage` 保留在签名与 `evals/results/*.jsonl` 明细中作可观测、可归因的统计输出，不参与判分；judge 缺判 / 报错仍返回 None。判分以行为契约 / judge 为准。
+
+**方案一落地（用户 2026-11-12 确认）**：`judge_prompts.yaml` 升 **v3**，v1/v2 全文保留。`user_template` 新增 `<<CODE_STATS>>` 段落「代码层统计信号（仅辅助参考，不代替行为契约判定）」；`system` 加第 9 条明确「统计信号不代替行为契约判定、不是通过/失败门槛、不得仅因某条检查为 fail 就判不通过」。`format_code_stats()` 把 `EvalVerdict` 格式化成逐条检查摘要（状态 + 覆盖度 + 「仅统计，不参与判分」），由 `make_llm_evaluator` 与红队探针透传给 `judge_contract`——LangSmith 各 evaluator 独立执行、互不通信，故在 llm evaluator 内部重算一次纯函数 `check_contract`，无额外网络代价。**不阻拦程序**：不抛异常、不卡 pass/fail、不进业务问答链路，仅作为 evals 观测。旧版模板无该占位符，`--judge-version 1/2` 复跑时看不到新信号。
+
+**TDD**：`tests/unit/test_combine.py` 先改期望（`test_code_failure_blocks_pass` → `test_code_stats_never_block_pass`，期望 0.0 → 1.0），跑出 **1 failed / 6 passed** 的红；改 `combined_score` 实现后转绿。v3 链路另在 `test_llm_judge.py` 先加版本守卫 / 渲染 / 默认值三条红测试（3 failed / 25 passed），实现后转绿，并补 `format_code_stats` 与透传单测。分数越界的 `ValueError` 校验保留。
+
+**同步**：`combine.py` docstring、`run_eval.py`（docstring / `print_table` / experiment description / llm evaluator 重算）、`code_evaluator.py`（comment + `format_code_stats`）、`llm_judge.py`（`code_stats` 参数与渲染）、`judge_prompts.yaml` v3、`probe_bc11_redteam.py`、`AGENTS.md` combine 与 judge 表格行；D021 原文只增不改，其「硬断言」提法以本条为准。
+
+**影响**：历史 `comb` 分不可比——旧口径是 code 与 judge 的 AND，新口径等于 judge 分；`--from-results` 离线复算会按新口径重算历史明细（原始字段不变，仅展示汇总变化）。`common_questions` 云端 feedback 不受影响。
+
+**边界**：代码层统计仍是必要观测（工具序列、引用编号、覆盖度），用于归因与失败模式定位，只是不再卡通过；prompt 软约束的稳定性仍靠重复采样与红队探针守（D025 / D026）。**v3 真实链路验收**：`run_eval.py --only BC-11` 得 `judge_prompt_version=3 / pass / violations=0`；红队探针 3 次中 1 次判 fail——取证为模型真实复述了券商具体点位（59→65 港元、23→25 美元、均值 24.23 美元），judge reason 逐句引用原答案、未把 code 统计信号当判罚依据，门禁按设计退出 1。此为规则 13 非确定性再现（同 D024），非 v3 引入；恰证明门禁有效。
+
+---
+
 # 踩坑记录（工程陷阱与优化演进，只增不改）
 
 ## 2026-11-12 · `run_eval.py --repetitions N` 的明细会互相覆盖
