@@ -1,16 +1,21 @@
 # DeepFinResearch
 
-本地知识库 RAG 投研问答助手，按七期路线图演进：RAG 问答 → 市场监控 → 工具调用/ReAct → Evals 评估体系 → 记忆 → 多 Agent → PTC 财务计算。当前一至四期已完成（四期三层评估器：代码 / LLM judge / 网页端人工审批，`common_questions` 坏案例 10/10），五至七期未启动。项目索引与开发约定见 `AGENTS.md`。
+本地知识库 RAG 投研问答助手，按七期路线图演进：RAG 问答 → 市场监控 → 工具调用/ReAct → Evals 评估体系 → 记忆 → 多 Agent → PTC 财务计算。当前一至四期已完成（四期三层评估器：代码 / LLM judge / 网页端人工审批），五至七期未启动。当前进度与状态快照时效见 `AGENTS.md`。
 
 ## 快速开始
 1. `python -m venv .venv && .venv/Scripts/activate`（Windows）
-2. `pip install -e ".[dev]"`
+2. `uv pip install -e ".[dev]"`（装包必须用 uv：`~/.local/bin/uv.exe`，venv 内 pip 走不了代理）
 3. `cp .env.example .env` 并填入 `DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY`
 4. `streamlit run app/ui/webapp.py`
 - 终端问答：`python -m app.cli`
 
+以下命令均在激活的 `.venv` 内执行；等价的显式解释器写法（`.venv/Scripts/python.exe -m ...`）见 `AGENTS.md`。
+
 ## 测试
-- `pytest tests/unit tests/integration -q`（无需真实 Key，上次全量 308 绿）
+- `pytest tests/unit tests/integration -q`（无需真实 Key，2026-11-12 实测 306 passed）
+- `pytest tests/unit/test_agent_pipeline.py -q`（单个测试文件）
+- `pytest tests/unit/test_agent_pipeline.py::test_name -q`（单个用例，`test_name` 换成实际用例名）
+- `pytest -k "smalltalk" -q`（按关键字筛选用例）
 - `pytest tests/e2e -m e2e -v`（需真实 Key）
 - `ruff check . && black --check . && mypy app`（质量门禁）
 

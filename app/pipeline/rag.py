@@ -18,7 +18,7 @@ def _traced_retrieve(retriever: Retriever, question: str) -> list[RetrievedChunk
 
 
 class RAGPipeline:
-    """一期所有 prompt 组装唯一收口。三期 ReAct / 四期 ContextBuilder / 五期角色化在此扩展。"""
+    """一期所有 prompt 组装唯一收口。三期 ReAct / 五期多 Agent 角色化在此扩展。"""
 
     def __init__(
         self, retriever: Retriever, llm, system_prompt: str = SYSTEM_PROMPT

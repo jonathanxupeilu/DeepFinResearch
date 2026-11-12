@@ -1,10 +1,43 @@
-# AGENT.md — DeepFinResearch 项目索引
+# AGENTS.md — DeepFinResearch 项目索引
 
 > 面向 AI Agent / 新成员的项目导航。全局开发规范（编码/TDD/质量门禁/密钥管理）见 `~/.qoder-cn/agents.md`，本文件只做**项目级索引**：改哪个文件前，先在这里找到它是什么、归哪期管、对应哪份文档。
 
 ## 项目是什么
 
-本地知识库 RAG 投研问答助手，七期路线图演进为多 Agent 投研平台。当前状态：**一至四期已完成**；四期 Evals 三层评估器（代码 / LLM judge / 人工审批）全部落地，`common_questions` 10/10，网页端签字 BC-10 pass / BC-11 fail（D024）。质量基线：ruff/black/mypy 零错误；上次全量 308 个 unit/integration 测试绿，本轮新增 2 条规格守卫定向通过（全量因沙箱拦截临时目录清理未重跑）；e2e 冒烟含真实 function calling 链路。遗留：BC-01 灰区口径、云端 dataset 契约 `--replace` 同步。
+本地知识库 RAG 投研问答助手，七期路线图演进为多 Agent 投研平台。当前状态：**一至四期已完成，五至七期未启动**（最后代码提交 2026-11-06）。四期三层评估器（代码 / LLM judge / 人工审批）全部落地；2026-11-12 实测 ruff/black/mypy 零错误、全量 pytest 306 passed，e2e 冒烟含真实 function calling 链路。**状态快照时效**：`common_questions` 10/10 与网页端签字「BC-10 pass / BC-11 fail」均为 11-06 **D024 修复前**结果；修复后 BC-11 只做过单条定向回归且未走联网路径，稳定性未验证（见 D025）。遗留：BC-01 灰区口径、云端 BC-11 契约仍为旧 3 条 `must_not`（本地真源 4 条，`--replace` 未推）、8 个提交未 push。
+
+## 架构总览（big picture）
+
+### 目录地图
+
+```
+DeepFinResearch/
+├── app/                        # 应用代码（明细见「代码索引」）
+│   ├── factory.py              # 组合根：唯一依赖组装入口
+│   ├── pipeline/               # prompt 收口 + RAG / Agent 问答链路
+│   ├── tools/ llm/ retrieval/  # 适配层：工具注册表 / 大模型 / 向量库
+│   ├── ingest/ monitor/ evals/ # 文档入库 / 市场监控 / 评估器
+│   ├── ui/ cli.py              # Streamlit 双页 + 终端 REPL（薄壳）
+│   └── config.py models.py chat_store.py
+├── tests/                      # unit / integration / e2e（见「测试索引」）
+├── scripts/                    # 采集探针 + Evals 构建 / 推送 / 运行
+├── evals/                      # *.yaml 真源 + results/（产物，已 gitignore）
+├── docs/                       # plans/ 分期设计与实施计划 + DECISIONS.md
+├── config/                     # holdings.json / policy_calendar.json（运行期配置）
+├── data/ knowledge/            # 已 gitignore：chroma+monitor.db / 用户文档
+└── pyproject.toml uv.lock .env.example
+```
+
+一次提问的主链路（跨文件，详见「核心链路」）：`ui/cli → factory（组装）→ pipeline/agent.py（ReAct）→ tools/ → llm/client.py`；`pipeline/` 统一装配 prompt，引用经 `citations.py` 按 `[n]` 回挂。
+
+### 架构不变量（跨文件约束）
+
+- **组合根唯一**：所有组件只在 `app/factory.py` 接线，UI/CLI 共用；新增工具 = 一个类 + factory 注册一行。
+- **prompt 单一真源**：全部提示词只在 `app/pipeline/prompts.yaml`，`pipeline/` 包是组装收口；调优话术不改 Python。
+- **禁裸 dict**：核心业务数据一律 Pydantic v2（`app/models.py`），跨层传递用模型不用 dict。
+- **检索空间**：Chroma 集合必须 cosine（`metadata={"hnsw:space": "cosine"}`），retriever 相似度阈值才有意义。
+- **降级不抛**：工具内部 / 采集器 / 空检索均 catch 异常降级为文本或空结果，链路不中断。
+- **观测与判分隔离**：LLM judge 用不带 `wrap_openai` 的原生客户端，避免污染实验 trace。
 
 ## 路线图（v3，七期）
 
@@ -13,7 +46,7 @@
 | 一期 | 本地 RAG 问答（入库→检索→prompt→LLM 带引用）+ Streamlit/CLI | ✅ 完成 |
 | 二期 | 市场监控面板（公告/要闻/宏观/美联储/会议/行业 6 维度），左菜单双页导航 | ✅ 完成 |
 | 三期 | 工具调用 + ReAct 自主决策（AgentPipeline，取代一期闲聊正则分流） | ✅ 完成 |
-| 四期 | 测评集与评估体系 Evals（LangSmith 观测 + 基线集 + 坏案例集 + 代码/LLM/人工三层评估器） | ✅ 完成：10/10 全量回归 + 网页端人工审批签字（D020-D024）；BC-11 合规红线修后定向回归 pass |
+| 四期 | 测评集与评估体系 Evals（LangSmith 观测 + 基线集 + 坏案例集 + 代码/LLM/人工三层评估器） | ✅ 完成：三层评估器 + 网页端人工审批签字（D020-D024）。注意 10/10 全量回归是 D024 修复前产物；BC-11 修复后仅单条定向回归且未走联网路径，稳定性见 D025 |
 | 五期 | 记忆与上下文管理（短期/长期，ContextBuilder） | 未启动 |
 | 六期 | 多 Agent 编排（芒格/施洛斯/巴菲特/邓普顿/马克斯五种投资思维角色） | 未启动 |
 | 七期 | 财报/研报深度解读 + PTC 确定性财务计算（DCF/清算价值） | 未启动 |
@@ -31,6 +64,8 @@
 | `docs/plans/2026-11-04-evals-observability-litefuse-feasibility.md` | 四期观测平台选型调研（定案见 §10 / D019）+ **§11 实施落地附记**（评估体系实际交付与偏差）。改 `evals/` 或 judge 口径前读 |
 | `docs/DECISIONS.md` | **决策日志**（D001-D024，只增不改）+ **踩坑记录**（唯一记录处）+ 变更记录。改动前先查、做完回写；四期关键决策：D020 行为契约 / D021 三层评估器 / D022 judge 观测 / D023 闲聊约束落 prompt / D024 人工审批闭环与 BC-11 合规红线 |
 | `README.md` | 快速开始：安装、配置 .env、启动命令 |
+| `config/holdings.json` | 持仓 A 股代码（JSON 数组，`code` 为 6 位代码），驱动公告采集维度；缺文件则该维度无数据、其余维度不受影响 |
+| `config/policy_calendar.json` | 重大会议（POLICY 维度）日历，`PolicyCollector` 读取并取未来 30 天内的临近会议，坏条目逐条跳过 |
 
 ## 代码索引
 
@@ -126,12 +161,31 @@ cli.py / webapp.py → factory ─→ pipeline/agent.py（三期默认入口，R
 | `tests/e2e/test_agent_smoke.py` | Agent 真实链路：闲聊不调工具 / 知识库问题触发 knowledge_search | 需 .env 双 Key，无 Key 自动 skip |
 
 ```bash
-# 常用命令（Windows, Git Bash）
-.venv/Scripts/python.exe -m pytest tests/unit tests/integration -q   # 全量无 Key 测试（上次 308 绿；沙箱可能拦临时目录清理）
-.venv/Scripts/python.exe -m pytest tests/e2e -m e2e -v               # 真实 API 冒烟
-.venv/Scripts/python.exe -m ruff check . && .venv/Scripts/python.exe -m black --check . && .venv/Scripts/python.exe -m mypy app
+# 常用命令（Windows, Git Bash）；命令用 .venv/Scripts/python.exe 显式解释器，
+# 激活 venv 后等价写 python / pytest（README 风格），二者一致
+
+# ── 环境 / 安装 ──
+python -m venv .venv && .venv/Scripts/activate   # 建 venv 并激活
+uv pip install -e ".[dev]"                       # 装包必须用 uv（~/.local/bin/uv.exe）；venv 内 pip 走不了代理
+cp .env.example .env                             # 填 DEEPSEEK_API_KEY / DASHSCOPE_API_KEY
+
+# ── 质量门禁 ──
+.venv/Scripts/python.exe -m ruff check .
+.venv/Scripts/python.exe -m black --check .
+.venv/Scripts/python.exe -m mypy app
+
+# ── 测试 ──
+.venv/Scripts/python.exe -m pytest tests/unit tests/integration -q              # 全量无 Key 测试（2026-11-12 实测 306 passed）
+.venv/Scripts/python.exe -m pytest tests/e2e -m e2e -v                          # 真实 API 冒烟（e2e marker 见 pyproject.toml）
+.venv/Scripts/python.exe -m pytest tests/unit/test_agent_pipeline.py -q         # 单个测试文件
+.venv/Scripts/python.exe -m pytest tests/unit/test_agent_pipeline.py::test_name -q  # 单个用例（test_name 换成实际用例名）
+.venv/Scripts/python.exe -m pytest -k "smalltalk" -q                           # 按关键字筛选用例
+
+# ── 启动 ──
 .venv/Scripts/python.exe -m streamlit run app/ui/webapp.py           # 网页版
 .venv/Scripts/python.exe -m app.cli                                  # 终端版
+
+# ── 评估实验（四期）──
 .venv/Scripts/python.exe scripts/run_eval.py --dry-run                # 预览评估实验（不花钱）
 .venv/Scripts/python.exe scripts/run_eval.py --only BC-06,BC-12       # 闲聊规则 2 定向回归
 .venv/Scripts/python.exe scripts/run_eval.py --only BC-11             # 合规规则 13 定向回归
