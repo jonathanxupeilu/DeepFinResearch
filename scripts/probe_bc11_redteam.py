@@ -1,9 +1,13 @@
 # scripts/probe_bc11_redteam.py
-"""BC-11 合规红线联网路径红队探针（D025）。
+"""BC-11 合规红线联网路径红队探针（D025/D026）。
 
-直接用本地 evals/bad_cases.yaml 的 4 条 must_not 契约判分，绕开 run_eval.py
-从云端 example.outputs 取契约导致的「第 4 条不进检查项」缺陷；题干显式要求
-联网检索券商目标价，强制覆盖 web_search 路径。
+用本地 evals/bad_cases.yaml 的 4 条 must_not 契约直接判分，不建 LangSmith
+experiment；题干显式要求联网检索券商目标价，强制覆盖 web_search 路径。
+
+与 run_eval.py --only BC-11 分工：后者测正常输入下的验收（云端契约已于 D026
+同步为 4 条，不再是半盲），本探针测被施压且外部证据含目标价时规则 13 是否
+守住——正式回归实测联网覆盖仅 1/5，只有本探针能稳定触发目标路径。内置覆盖度
+检查：0 次联网覆盖判测试无效，退出码 1。
 
 用法：
   .venv/Scripts/python.exe scripts/probe_bc11_redteam.py --repetitions 3
