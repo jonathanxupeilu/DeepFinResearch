@@ -4,7 +4,7 @@
 
 ## 项目是什么
 
-本地知识库 RAG 投研问答助手，七期路线图演进为多 Agent 投研平台。当前状态：**一至四期已完成，五至七期未启动**（最后代码提交 2026-11-06）。四期三层评估器（代码 / LLM judge / 人工审批）全部落地；2026-11-12 实测 ruff/black/mypy 零错误、全量 pytest 306 passed，e2e 冒烟含真实 function calling 链路。**状态快照时效**：`common_questions` 10/10 与网页端签字「BC-10 pass / BC-11 fail」均为 11-06 **D024 修复前**结果；修复后 BC-11 只做过单条定向回归且未走联网路径，稳定性未验证（见 D025）。遗留：BC-01 灰区口径、云端 BC-11 契约仍为旧 3 条 `must_not`（本地真源 4 条，`--replace` 未推）、8 个提交未 push。
+本地知识库 RAG 投研问答助手，七期路线图演进为多 Agent 投研平台。当前状态：**一至四期已完成，五至七期未启动**（最后代码提交 2026-11-12）。四期三层评估器（代码 / LLM judge / 人工审批）全部落地；2026-11-12 实测 ruff/black/mypy 零错误、全量 pytest 306 passed，e2e 冒烟含真实 function calling 链路。**状态快照时效**：`common_questions` 10/10 与网页端签字「BC-10 pass / BC-11 fail」均为 11-06 **D024 修复前**结果；修复后 BC-11 曾在联网路径翻车，规则 13 已加固并在 6 次采样（5 次覆盖联网）中验证通过（D025）。2026-11-12 已闭环：10 个提交 push、云端 BC-11 契约同步为 4 条 `must_not`、红队探针接入门禁（D026）。遗留：BC-01 灰区与 D025 新灰区待人工签定。
 
 ## 架构总览（big picture）
 
@@ -93,7 +93,7 @@ cli.py / webapp.py → factory ─→ pipeline/agent.py（三期默认入口，R
 |---|---|---|
 | `app/pipeline/agent.py` | AgentPipeline：function calling ReAct 循环、全局证据编号 [n]、未知工具/失败容错、max_iterations 熔断后强制终答；`answer(question, history, session_id)` 注入多轮上下文（最近 10 条、单条截断 1500 字）；四期观测：`@traceable` 埋 answer（内部 `_traced_answer` 接 langsmith_extra）与工具执行 span，session_id 经 metadata 串 LangSmith thread | 与 rag.py 并列为 prompt 收口；系统提示词静态常量（时间靠 current_time 工具，D016）；六期多 Agent 在此注入角色 |
 | `app/pipeline/rag.py` | 检索→prompt→LLM→RagAnswer 带引用；空检索诚实拒答；四期观测：`@traceable` 埋 answer 与检索 span | 单轮快速通道（e2e 基线），Agent 入口已废除闲聊正则 |
-| `app/pipeline/prompts.yaml` | **全部 prompt 唯一维护处**：rag/agent/tools 三组提示词（SYSTEM_PROMPT / AGENT_SYSTEM_PROMPT / USER_TEMPLATE / 拒答文案 / 工具 description）；agent 规则 2 含纯闲聊「一句话 20 字内」约束（D023 修 BC-06），规则 13 为合规红线「外部研报目标价也不得复述」（D024 修 BC-11） | 调优任何话术只改此文件；改规则 2 必须跑 `run_eval.py --only BC-06,BC-12`，改规则 13 必须跑 `--only BC-11`；两条都是软约束，回归才作数 |
+| `app/pipeline/prompts.yaml` | **全部 prompt 唯一维护处**：rag/agent/tools 三组提示词（SYSTEM_PROMPT / AGENT_SYSTEM_PROMPT / USER_TEMPLATE / 拒答文案 / 工具 description）；agent 规则 2 含纯闲聊「一句话 20 字内」约束（D023 修 BC-06），规则 13 为合规红线「外部研报目标价也不得复述」（D024 修 BC-11） | 调优任何话术只改此文件；改规则 2 必须跑 `run_eval.py --only BC-06,BC-12`，改规则 13 必须跑 `--only BC-11` **+ `probe_bc11_redteam.py --repetitions 3`**（门禁，见运行须知）；两条都是软约束，回归才作数 |
 | `app/pipeline/prompts.py` | prompts.yaml 加载器：读 yaml 暴露同名常量；闲聊正则 + `is_smalltalk`（程序逻辑）保留在此 | 与 rag.py/agent.py 并列为 prompt 收口 |
 | `app/pipeline/citations.py` | 引用构建共享逻辑（按 [n] 标注过滤/越界忽略/无标注保留全部） | rag 与 agent 共用 |
 | `app/tools/base.py` | Tool Protocol + ToolSpec/ToolResult/Evidence（Pydantic） | 工具内部 catch 全部异常降级失败文本；Evidence 不编号，编号归循环层 |
@@ -173,6 +173,7 @@ cp .env.example .env                             # 填 DEEPSEEK_API_KEY / DASHSC
 .venv/Scripts/python.exe -m ruff check .
 .venv/Scripts/python.exe -m black --check .
 .venv/Scripts/python.exe -m mypy app
+# 改 prompts.yaml 规则 13 时追加下方「评估实验」段的红队探针（真实链路、退出码非 0 不放行）
 
 # ── 测试 ──
 .venv/Scripts/python.exe -m pytest tests/unit tests/integration -q              # 全量无 Key 测试（2026-11-12 实测 306 passed）
@@ -205,5 +206,5 @@ cp .env.example .env                             # 填 DEEPSEEK_API_KEY / DASHSC
 - 四期评估：LangSmith 用 **APAC 端点**（`LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com`）；`common_questions` 含用户手录条目，任何推送脚本都不得删除非本批 case_id
 - 改 judge 判分口径 → 升 `evals/judge_prompts.yaml` 版本，用 `--judge-version N` 复跑旧实验做前后对比；**v1 原文不得删**
 - 改 `prompts.yaml` 的 agent 规则 2（闲聊）后必须跑 `run_eval.py --only BC-06,BC-12`：`is_smalltalk` 正则对组合问候（如「你好，谢谢啦！」）漏判，约束只能靠 prompt + eval 回归（D023）
-- 改 agent 规则 13（合规红线）后必须跑 `run_eval.py --only BC-11`：联网路径会把券商研报里的具体目标价绕过「不输出目标价」带进答案，规则须显式覆盖外部来源（D024）
+- 改 agent 规则 13（合规红线）后必须两条都跑：`run_eval.py --only BC-11`（云端契约 2026-11-12 已同步为 4 条 `must_not`，判分项含「禁复述联网研报目标价」）+ `scripts/probe_bc11_redteam.py --repetitions 3`（本地真源、强制覆盖 `web_search` 路径）。后者退出码非 0（违规 / 判分异常 / 联网 0 覆盖）即不放行；正式回归 5 次实测联网覆盖仅 1/5，单靠它守不住（D024/D025/D026）
 - `evals/results/` 是实验产物、已 gitignore；真源是 `evals/*.yaml` 与 `app/evals/`
